@@ -1,9 +1,10 @@
 """Entry point.
 
-    python main.py backtest            # features -> walk-forward model -> MILP picks -> reports/ (~15 min)
+    python main.py backtest            # features -> walk-forward model -> MILP picks -> reports/ (~10 min)
     python main.py pick --gw 20        # best XI for a 2025-26 gameweek from the saved predictions
     python main.py app                 # interactive demo (Streamlit)
     python main.py explain             # which signal families earn points (permutation importance, ~3 min)
+    python main.py season              # full FPL rules: 15-man squad, transfers and hits over the season (~3 min)
     python main.py mcp                 # serve the optimiser to an AI assistant over MCP (stdio)
     python main.py download            # refresh data/raw from the FPL Historical Dataset
 """
@@ -83,6 +84,15 @@ def cmd_explain(_: argparse.Namespace) -> None:
     print(sv.round(3).to_string(index=False))
 
 
+def cmd_season(_: argparse.Namespace) -> None:
+    from fplopt import season
+
+    pred = pd.read_csv(REPORTS_DIR / "predictions_2025-26.csv.gz")
+    tabs = season.run(pred)
+    season.write(tabs)
+    print(season.headline(tabs))
+
+
 def cmd_mcp(_: argparse.Namespace) -> None:
     logging.getLogger().handlers.clear()            # stdout is the MCP channel: keep it clean
     from fplopt.mcp_server import main as serve
@@ -95,6 +105,9 @@ def cmd_download(_: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):  # player names such as Ødegaard print on any console (e.g. Windows cp1252)
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     p = argparse.ArgumentParser(description="FPL team selection as constrained portfolio optimisation")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -106,6 +119,7 @@ def main() -> None:
     pk.set_defaults(fn=cmd_pick)
     sub.add_parser("app").set_defaults(fn=cmd_app)
     sub.add_parser("explain").set_defaults(fn=cmd_explain)
+    sub.add_parser("season").set_defaults(fn=cmd_season)
     sub.add_parser("mcp").set_defaults(fn=cmd_mcp)
     sub.add_parser("download").set_defaults(fn=cmd_download)
     a = p.parse_args()

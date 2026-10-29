@@ -1,303 +1,217 @@
 # FPL team selection as constrained portfolio optimisation
 
-**Problem 2 (Fantasy Sports Team Optimiser).** A two-stage machine-learning model predicts each player's points with a calibrated interval; an exact mixed-integer programme picks the best legal XI and captain; a walk-forward backtest over every gameweek of the **2025-26 Premier League season** scores the picks against baselines that obey the same rules.
+**Nthabiseng Maoka** · [![tests](https://github.com/NthabiM-07/fpl-portfolio-optimiser/actions/workflows/tests.yml/badge.svg)](https://github.com/NthabiM-07/fpl-portfolio-optimiser/actions/workflows/tests.yml) · Python 3.11–3.13 · macOS, Windows, Linux · MIT licence
 
-> **Headline (2025-26, all 38 gameweeks, out of sample):** the model's XI scored **58.5 points per gameweek**. That is **+25.5% vs last week's points** (paired bootstrap 95% CI +5.2 to +18.3 pts/GW), **+25.9% vs the 5-week average** (CI +6.2 to +17.6), **+73.5% vs the most expensive XI** and **+319% vs a random legal XI**. The 15% target is cleared against every baseline, with confidence intervals that exclude zero.
+A forecasting and optimisation system for Fantasy Premier League (FPL). A two-stage machine-learning model predicts each player's points with a calibrated interval; an exact mixed-integer programme (MILP) picks the best legal team and captain; a walk-forward backtest over every gameweek of the **2025-26 Premier League season** scores the picks against baselines that obey the same rules.
+
+> **Result (2025-26, all 38 gameweeks, out of sample):** the model's team scored **58.5 points per gameweek**, **+25.5% vs picking on last week's points** (paired bootstrap 95% CI +5.2 to +18.3 points a week) and **+25.9% vs the 5-week average** (CI +6.2 to +17.6). Its forecast error was lower than both naive rules in **all 38 gameweeks** (Diebold-Mariano, p < 0.0001).
 
 ![Mean points per gameweek](reports/figures/mean_points.png)
 
-**Beyond the brief:**
-- **Decision-focused evaluation.** Scrambling each signal family shows that RMSE badly understates some signals: market signals and fixtures barely move RMSE, yet scrambling them costs the picked team 7-8 points a week (§7).
-- **Calibrated robust optimisation.** Intervals are calibrated out of sample per playing-status group (Mondrian CQR) and feed a Bertsimas-Sim uncertainty budget whose size Gamma is itself chosen from past data by a rule declared in advance; the robust team beat its guaranteed floor in 31 of 34 weeks (§4, §5, §7).
-- **Leakage forensics.** I tested FPL's own `xP` column instead of trusting it. Its edge fades a week later and tracks same-week goals and bonus, which strongly suggests post-match information (§7).
-- **Forecast significance.** The model's forecast error is lower than both naive baselines in every one of the 38 gameweeks (Diebold-Mariano, p < 0.0001).
-- **An AI-assistant interface.** An MCP server lets Claude or GitHub Copilot call the optimiser ("pick my GW 20 team under GBP 80m without Haaland"). The LLM routes the request; every number comes from the MILP (§10).
-- **Engineering.** 31 tests including Hypothesis property-based tests, GitHub Actions CI, and a dev container that opens the demo in Codespaces.
-
----
+**Highlights**
+- **Decision-focused evaluation.** Market and fixture signals barely move RMSE, yet scrambling them costs the picked team 7–8 points a week: forecasts are judged by the decisions they drive.
+- **Calibrated robust optimisation.** Conformal intervals feed a Bertsimas-Sim robustness budget whose size is set from past data by a rule fixed in advance.
+- **Leakage forensics.** FPL's own `xP` column was tested rather than trusted; it carries post-match information and is excluded.
+- **The full game.** A rolling-horizon MILP manages a 15-man squad with transfers, hits and automatic substitutions over the season.
+- **Engineering.** 37 unit and property-based tests, CI on three operating systems, pinned versions that reproduce every committed result.
 
 ## Quick start
 
+Python 3.11–3.13; no GPU, and no internet after installing (four seasons of data are committed under `data/raw/`).
+
+**macOS or Linux**
+
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python main.py app            # interactive demo, runs offline from reports/ (about 10 seconds)
-pytest -q                     # 31 tests (unit + property-based), about 1 minute
-python main.py backtest       # optional: rebuild everything from raw data (about 10 minutes on a laptop)
-python main.py explain        # optional: decision-focused signal importance (about 3 minutes)
-python main.py pick --gw 20 --gamma 4     # print a robust XI for one gameweek
-python main.py mcp            # serve the optimiser to an AI assistant (see §10)
+git clone https://github.com/NthabiM-07/fpl-portfolio-optimiser.git && cd fpl-portfolio-optimiser
+make setup     # creates .venv with the exact tested versions (requirements-lock.txt)
+make test      # 37 tests, about 1.5 minutes
+make app       # interactive demo in the browser
 ```
 
-Python 3.10+; no GPU, no internet needed (the four season files are committed under `data/raw/`). **No local setup?** On GitHub, choose *Code → Codespaces → Create codespace*: the dev container installs everything and opens the demo. **Hosted demo:** `python scripts/build_hf_space.py` assembles a Hugging Face Docker Space in `dist/hf_space/` (Streamlit is no longer a built-in Spaces SDK, so the kit uses the Docker template); create an empty private Docker Space on huggingface.co and run `hf upload <user>/<space-name> dist/hf_space . --repo-type space`.
+**Windows (PowerShell)**
 
----
+```powershell
+git clone https://github.com/NthabiM-07/fpl-portfolio-optimiser.git; cd fpl-portfolio-optimiser
+py -3.12 -m venv .venv; .venv\Scripts\Activate.ps1
+pip install -r requirements-lock.txt
+python -m pytest -q
+python main.py app
+```
 
-## 1. Framing: team selection is portfolio construction
+| Command | What it does |
+|---|---|
+| `python main.py app` | Interactive demo (Streamlit), offline |
+| `python main.py pick --gw 20 --gamma 4` | Print a robust team for one gameweek |
+| `python main.py backtest` | Rebuild every result from the raw data (~10 min) |
+| `python main.py explain` | Decision-focused signal importance (~3 min) |
+| `python main.py season` | Full-rules season with transfers (~3 min) |
+| `python main.py mcp` | Serve the optimiser to an AI assistant over MCP |
+
+**Reproducibility.** Random steps are seeded and every split is by time. On a fresh clone with `requirements-lock.txt`, `backtest` reproduces every committed results table exactly; other library versions can differ in the last decimals. No local setup: *Code → Codespaces* opens the demo in the browser.
+
+## Approach
+
+**Framing.** Team selection is portfolio construction: forecast return and risk for each player, then allocate under constraints.
 
 | Fantasy football | Portfolio |
 |---|---|
 | Expected points | Expected return |
 | 80% prediction interval | Risk |
 | GBP 83.5m budget for the XI | Capital |
-| 1 GK, 3-5 DEF, 2-5 MID, 1-3 FWD | Sector limits |
+| 1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD | Sector limits |
 | At most 3 players per club | Concentration limit |
 | Captain scores double | One leveraged position |
 
-So the work splits into a **forecasting** problem (expected return and risk per player) and an **allocation** problem (choose the portfolio under constraints). Both are evaluated on what actually happened.
+**Data.** The FPL Historical Dataset (Vaastav Anand, MIT licence), seasons 2022-23 to 2025-26: 109,956 player-gameweeks after summing double gameweeks. Features use only information available before each deadline: rolling form over 1–10 gameweeks (points, minutes, xG, xA, BPS and more), price and lagged ownership, and fixture strength. A test overwrites every outcome from gameweek 20 onward and checks that no earlier feature changes.
 
-## 2. Data
-
-- **FPL Historical Dataset** (Vaastav Anand, MIT licence): gameweek-level stats for every player, seasons **2022-23 to 2025-26** (109,956 player-gameweeks after cleaning). Columns include minutes, starts, goals, assists, xG, xA, xGC, BPS, price, ownership, transfers, fixture and opponent.
-- Cleaning (`src/fplopt/data.py`): drop the 2024-25 assistant-manager rows; sum double gameweeks into one row per player per gameweek; derive each fixture's opponent; build a cross-season player key so a player's form carries over the summer.
-- **Never used as a feature or a benchmark:** the dataset's `xP` column. The dataset warns it can contain post-match information; the audit in §7 confirms it.
-
-## 3. Features: strictly as-of
-
-Every feature for gameweek *t* uses only information available before the *t* deadline (`src/fplopt/features.py`):
-
-- Player form: rolling means over the previous 1, 3, 5 and 10 gameweeks of points, minutes, starts, xG, xA, xGC, BPS, clean sheets and saves; share of recent games with 60+ minutes; points per 90; gameweeks since the last appearance; season-to-date and previous-season averages.
-- Market signals: current price (set before the deadline), price change, and **lagged** ownership and net transfers.
-- Fixture context: number of fixtures (double gameweeks), home or away, own team's and opponent's rolling goals and xG for and against (aggregated per gameweek, so a double gameweek's second match cannot leak into the first).
-- A **scoring-regime flag** for 2025-26, when defensive-contribution points were introduced.
-
-A test overwrites every outcome from gameweek 20 onward and asserts that no feature up to gameweek 20 changes (`tests/test_data_features.py`).
-
-## 4. Model: will he play, and how much will he score if he does?
-
-59% of player-gameweeks (61% in 2025-26) are zero-minute rows. A single regressor has to average two very different populations, so the model is split, mirroring credit's **EL = PD x LGD x EAD**:
+**Model.** About 60% of player-gameweeks are zero minutes, so the model has two stages, like PD × LGD in credit:
 
 ```
-E[points] = P(1-59 min) x E[pts | 1-59 min]  +  P(60+ min) x E[pts | 60+ min]
+E[points] = P(1-59 min) · E[pts | 1-59 min]  +  P(60+ min) · E[pts | 60+ min]
 ```
 
-- Stage 1: a gradient-boosted classifier over minutes buckets {0, 1-59, 60+}.
-- Stage 2: gradient-boosted regressors for points in each playing bucket.
-- **Intervals:** quantile gradient boosting at 10% and 90%, then a conformalised quantile regression (CQR) check-and-correct step on the most recent 8 gameweeks of *out-of-sample* predictions (seeded by a 2024-25 warm-up). It is **Mondrian**: likely starters (P(60+ min) >= 0.5, known before the deadline) and everyone else are calibrated separately, because pooled, the zero-minute rows (score exactly 0) would decide the answer. In every block the correction came out **0**: points and the 10% quantile are whole numbers, so many players land exactly on their lower bound, and that tie mass sits at the 80th percentile of the scores. In plain terms, the raw intervals already covered at least 80% out of sample in both groups, and the next possible correction is a whole point. The guarantee is per player and approximate when the season drifts.
-- **Why gradient boosting (scikit-learn `HistGradientBoosting`):** it handles missing values natively (new players, promoted teams), captures non-linear interactions (price x minutes x fixture), trains in seconds on a laptop, and needs no scaling. The ablation below justifies the two-stage design over a single model.
+Gradient boosting (scikit-learn `HistGradientBoosting`) fits the minutes classifier and the conditional points regressors. Quantile models give the 10% and 90% bounds, checked by Mondrian conformal calibration (CQR) on recent out-of-sample weeks, separately for likely starters and everyone else.
 
-## 5. Optimisation
-
-**Nominal MILP** (`src/fplopt/optimise.py`), solved exactly with SciPy's HiGHS in about 0.1 s per gameweek for about 750 players:
+**Optimisation.** An exact MILP (SciPy/HiGHS, about 0.1 s for ~770 candidates) picks 11 players and a captain:
 
 ```
-max   sum_i mu_i x_i + sum_i mu_i c_i
-s.t.  sum_i x_i = 11;  sum_i price_i x_i <= B;  sum_i c_i = 1;  c_i <= x_i
-      1 GK, 3-5 DEF, 2-5 MID, 1-3 FWD;  sum_{i in club j} x_i <= 3 for every club j
+max   Σ μ_i x_i + Σ μ_i c_i
+s.t.  Σ x_i = 11;  Σ price_i x_i ≤ B;  Σ c_i = 1;  c_i ≤ x_i
+      1 GK, 3-5 DEF, 2-5 MID, 1-3 FWD;  at most 3 per club
 ```
 
-**Robust dial (Bertsimas & Sim).** Each player can fall short of his expected points by d_i (the distance to the bottom of his 80% interval). The robust team maximises points after the worst **Gamma** shortfalls:
+The robust version maximises points after the worst Γ shortfalls, where each player's shortfall is the distance to the bottom of his interval. It is solved by the Bertsimas & Sim decomposition into ordinary MILPs on a θ grid (about 1.5 s), with each candidate team scored by its true worst case; property-based tests check it against the direct robust MILP.
 
-```
-max_x  sum_i mu_i x_i (+ captain)  -  max_{|S| <= Gamma} sum_{i in S} d_i x_i
-```
+**Validation.** Expanding-window walk-forward: retrain every 4 gameweeks and predict the next block, never random splits. Every baseline goes through the same MILP and rules; only the scores change. Significance is a paired bootstrap over gameweeks. Gameweeks 6–38 are a pre-declared secondary view.
 
-Bertsimas & Sim (2003) prove the robust problem equals a set of ordinary MILPs with adjusted scores, `max_theta [ -Gamma*theta + nominal(mu_i - max(d_i - theta, 0)) ]`, and Lee & Kwon (2014) show about half of the theta values suffice. On the full ~790-player pool, neither the direct robust MILP nor the exact decomposition is fast (tens of seconds at Gamma = 4). The speed comes from solving the decomposition on a **theta grid** (16 points: about 1.5 s on the full pool), and scoring each candidate team by its *true* worst case, so the grid answer is always a valid robust team, at worst slightly conservative. Property-based tests check that the exact decomposition equals the direct MILP on random pools. All MILPs are solved to proven optimality (`mip_rel_gap = 0`).
-
-**Conformal uncertainty sets.** Each d_i comes from an interval checked by conformal calibration on recent out-of-sample data, in the spirit of Johnstone & Cox (2021) and Patel, Rayan & Tewari (2024), here in budgeted form. The calibration is per player and approximate under drift; it is not a team-level guarantee. Gamma then limits how many players are assumed to miss at once. Ramezani & Dinh (2025) use a box set, which assumes every player hits his worst case together; the budgeted set is far less conservative and lets the manager choose the level.
-
-**Sensitivity:** the budget's shadow price comes from the LP relaxation's dual values; the cost of the club cap comes from re-solving with the cap removed.
-
-## 6. Validation
-
-- **Walk-forward, expanding window:** retrain every 4 gameweeks on all data before the block; predict the block; never random splits.
-- **Fair baselines:** every strategy goes through the same MILP with the same budget, formation, club cap and captain rule; only the score changes. (The starter code's baselines broke the budget and position rules, so comparing against them would have been meaningless.)
-- **Decision metric:** realised XI points (captain doubled) per gameweek. **Significance:** paired bootstrap over gameweeks.
-- **Pre-declared views:** the primary view is all 38 gameweeks; the secondary view is gameweeks 6-38 (both reported below, whatever they showed).
-
-## 7. Results (2025-26, out of sample)
+## Results (2025-26, out of sample)
 
 ### Team selection
 
-| Strategy (same MILP, same rules) | Points per GW | vs last week | vs mean of last 5 | vs most expensive |
-|---|---|---|---|---|
-| **Two-stage model** | **58.5** | **+25.5%** | **+25.9%** | **+73.5%** |
-| Single-GBM model (ablation) | 53.1 | +14.1% | +14.4% | +57.6% |
-| Mean of last 5 gameweeks | 46.4 | -0.3% | 0.0% | +37.8% |
-| Last week's points | 46.6 | 0.0% | +0.3% | +38.2% |
-| Most expensive XI | 33.7 | -27.6% | -27.4% | 0.0% |
-| Random legal XI (10 seeds) | 13.9 | -70.1% | -70.0% | -58.6% |
-| Hindsight oracle (upper bound) | 155.0 | | | |
-
-Gameweeks 6-38 only: model 58.3 per GW, +25.7% vs last week (CI +4.2 to +19.4 pts/GW), +24.5% vs mean of last 5 (CI +4.8 to +18.0). Against the single-GBM ablation the GW 6-38 gain (+3.4) is **not** significant (CI -1.5 to +8.5); over all 38 gameweeks it is.
-
-| Model minus baseline | Mean pts/GW | 95% CI (paired bootstrap) | GWs model ahead |
+| Strategy (same MILP, same rules) | Points per GW | vs last week | Model minus this, 95% CI |
 |---|---|---|---|
-| Last week | +11.9 | +5.2 to +18.3 | 25 / 38 |
-| Mean of last 5 | +12.0 | +6.2 to +17.6 | 27 / 38 |
-| Most expensive XI | +24.8 | +18.5 to +31.0 | 33 / 38 |
-| Single GBM (ablation) | +5.3 | +0.8 to +10.0 | 23 / 38 |
+| **Two-stage model** | **58.5** | **+25.5%** | |
+| Single gradient-boosting model (ablation) | 53.1 | +14.1% | +5.3 (+0.8 to +10.0) |
+| Last week's points | 46.6 | 0.0% | +11.9 (+5.2 to +18.3) |
+| Mean of last 5 gameweeks | 46.4 | −0.3% | +12.0 (+6.2 to +17.6) |
+| Most expensive XI | 33.7 | −27.6% | +24.8 (+18.5 to +31.0) |
+| Random legal XI | 13.9 | −70.1% | |
+| Hindsight oracle (upper bound) | 155.0 | | |
+
+Captain doubled, GBP 83.5m XI. On gameweeks 6–38 the gains over both naive rules stay significant (+4.2 to +19.4 vs last week); the gain over the ablation does not (−1.5 to +8.5).
 
 ![Cumulative points](reports/figures/cumulative_points.png)
 
 ### Forecast accuracy
 
-RMSE by outcome bucket uses OpenFPL's protocol (Groos 2025): zeros = did not play, blanks <= 2 points, tickers 3-4, haulers >= 5.
+| Forecast | RMSE | MAE | Model has lower error in |
+|---|---|---|---|
+| Two-stage model | **1.938** | **0.978** | |
+| Single gradient-boosting model | 1.942 | 0.990 | 22 of 38 GWs (p = 0.37) |
+| Mean of last 5 | 2.144 | 1.066 | 38 of 38 (p < 0.0001) |
+| Last week | 2.613 | 1.163 | 38 of 38 (p < 0.0001) |
 
-| Forecast | RMSE | MAE | Zeros | Blanks | Tickers | Haulers |
-|---|---|---|---|---|---|---|
-| Two-stage model | **1.938** | **0.978** | **0.746** | 1.559 | **1.471** | **5.592** |
-| Single GBM | 1.942 | 0.990 | 0.750 | **1.552** | 1.495 | 5.605 |
-| Mean of last 5 | 2.144 | 1.066 | 0.923 | 2.027 | 1.946 | 5.754 |
-| Last week | 2.613 | 1.163 | 0.928 | 3.123 | 3.297 | 6.187 |
+Diebold-Mariano tests on gameweek-averaged squared error with a Newey-West variance. The ablation is the interesting case: squared error cannot separate it from the model, yet its teams score 5.3 points a week less. 72% of squared error comes from the 8.6% of rows that are large hauls nobody can foresee, while the optimiser only uses the ranking at the top.
 
-**Is the gain significant?** A Diebold-Mariano test (losses averaged within each gameweek, because players in the same week share shocks; Newey-West variance; Harvey-Leybourne-Newbold correction) across the 38 gameweeks:
-
-| Model vs | Squared error: DM, p | Model better (GWs) | Absolute error: DM, p | Model better (GWs) |
-|---|---|---|---|---|
-| Mean of last 5 | 11.3, p < 0.0001 | 38 / 38 | 9.5, p < 0.0001 | 38 / 38 |
-| Last week | 33.0, p < 0.0001 | 38 / 38 | 17.6, p < 0.0001 | 38 / 38 |
-| Single GBM | 0.9, p = 0.37 | 22 / 38 | 4.5, p < 0.001 | 33 / 38 |
-
-Against the single GBM the gain is not significant on squared error but is on absolute error, while its teams are 5.3 pts/GW worse over the season (CI +0.8 to +10.0). Squared error is dominated by hauls nobody can foresee (8.6% of rows, 72% of squared error), so small RMSE differences can hide real differences in who gets ranked at the top, which is all the optimiser uses. That motivates the next analysis.
-
-### Which signals do the decisions rely on? (decision-focused importance)
+### Which signals drive the decisions
 
 ![Signal value](reports/figures/signal_value.png)
 
-`python main.py explain` trains once on everything before 2025-26 GW 20, then scrambles each family of features within each gameweek (10 shuffles, frozen model) and measures two things on GW 20-38: the rise in RMSE, and the **points lost by the team the optimiser then picks** (base: 61.2 pts/GW).
+Each feature family is shuffled within gameweeks (10 times, frozen model trained before gameweek 20) and scored on gameweeks 20–38:
 
-| Signal family | RMSE added | XI points lost per GW (sd over 10 shuffles) |
+| Signal family | RMSE added | Team points lost per GW |
 |---|---|---|
-| Playing time (minutes, starts, availability) | **0.449** | **12.3** (3.5) |
-| Market and crowd (price, ownership, transfers) | 0.046 | 8.4 (3.1) |
-| Fixture (opponent strength, home, DGW) | 0.043 | 7.0 (2.2) |
-| Underlying stats (xG, xA, xGC, CS, saves, DefCon) | 0.002 | 2.0 (1.1) |
-| Longer history | 0.018 | 0.5 (2.2) |
-| Own team strength | 0.004 | 0.4 (1.4) |
-| Points form | 0.004 | -0.6 (1.5) |
+| Playing time (minutes, starts, availability) | 0.449 | 12.3 |
+| Market (price, ownership, transfers) | 0.046 | 8.4 |
+| Fixture (opponent strength, home, double gameweeks) | 0.043 | 7.0 |
+| Underlying stats (xG, xA, clean sheets, saves) | 0.002 | 2.0 |
+| Points form | 0.004 | −0.6 |
 
-The same three families lead both rankings, but the **scale** differs sharply. Scrambling market or fixture signals adds under 0.05 to RMSE yet costs 7-8 points a week; per unit of RMSE, they matter about six times as much to the decision as playing time does. RMSE is dominated by unforeseeable hauls and by the bulk of non-starters, while the optimiser only needs the ranking at the top end, which is where price, ownership and fixtures separate players. This is the argument of Elmachtoub & Grigas's "Smart Predict, then Optimize" (2022): judge a forecast by the decisions it drives. Caveats: this measures how much the frozen model *relies* on a family, not its causal worth; families overlap (points form duplicates BPS, xG and price), so a near-zero score can mean "replaceable"; and the spreads are wide enough that market and fixture cannot be ranked against each other.
+Market and fixture signals matter far more to the decision than RMSE suggests, because they separate the top-end players the optimiser chooses between (Elmachtoub & Grigas 2022). This measures how much the model relies on a family, not its causal value.
 
-### Leakage forensics: FPL's own xP column
+### Leakage forensics: FPL's `xP` column
 
-`xP` (FPL's published expected points) is filled in for only 11 of the 38 gameweeks of 2025-26, and on those it beats every pre-match forecast. Is that skill or hindsight? Two tests on the same 7,452 player-gameweeks (`src/fplopt/audit.py`, `reports/xp_audit.csv`, `reports/xp_partial.csv`):
+FPL's published expected points beat every pre-match forecast on the same week. Two checks on the 7,452 player-gameweeks where `xP` is filled in (`src/fplopt/audit.py`):
 
-**1. Does the edge last a week?** Quality, role and fixtures persist; what happened in this week's match does not.
-
-| Forecast made for week t | Corr. with week t points | Corr. with week t+1 points | Edge kept |
+| Forecast for week t | Corr. with week t points | Corr. with week t+1 points | Edge kept |
 |---|---|---|---|
-| Two-stage model (pre-match) | 0.557 | **0.527** | 95% |
-| FPL `xP` column | **0.734** | 0.478 | 65% |
-| Mean of last 5 (pre-match) | 0.461 | 0.460 | 100% |
+| Two-stage model | 0.557 | **0.527** | 95% |
+| FPL `xP` | **0.734** | 0.478 | 65% |
 
-**2. What does xP know that the model doesn't?** After removing everything the model's pre-match forecast explains (expected points, chance of 60+ minutes, 5-week form), xP's leftover part correlates **0.35 with this week's goals and 0.43 with this week's bonus**, but only 0.02 and 0.04 with next week's.
+After removing everything the pre-match model explains, `xP`'s remainder correlates 0.43 with this week's bonus points and 0.04 with next week's. A pre-match forecast cannot know who gets bonus, so `xP` is used neither as a feature nor as a benchmark.
 
-A pre-match forecast cannot know who scores or who gets bonus this week; `xP` loses a third of its edge a week later and is then worse than the model. That strongly suggests post-match information, as the dataset's README warns. `xP` is used neither as a feature nor as a benchmark.
+### Risk: intervals, robustness and constraints
 
-### Prediction intervals (target 80%)
+- **Interval coverage** (target 80%): 84.6% for likely starters, 80.8% for players who played (`reports/interval_coverage.csv`).
+- **Robustness budget Γ from data.** Each week Γ is set to the 80th percentile of the downside budget the team actually used in earlier weeks (it settled on 5–6). It costs 0.9 points a week on average (CI −2.9 to +1.1, not significant), raises the 10th-percentile week from 33.7 to 36.4, and the robust floor held in 31 of 34 weeks. No setting protects the worst week. The full Γ sweep is in `reports/robust_frontier.csv`.
+- **Constraints.** The budget binds in 21 of 38 gameweeks but is worth only ~0.09 points per extra GBP 1m. The club cap binds in 11 gameweeks, costing 2.9 points when it does; in double gameweek 26 the uncapped team would have picked 9 Arsenal players.
 
-| Group | Coverage | Mean width (pts) | Rows |
-|---|---|---|---|
-| Likely starters (P(60+) >= 0.5, Mondrian group) | **84.6%** | 6.8 | 7,717 |
-| Others | 94.3% | 1.2 | 21,621 |
-| Players who played (known only afterwards) | 80.8% | 5.5 | 11,361 |
-| All rows | 91.8% | 2.6 | 29,338 |
-
-The conformal correction was 0 in every block (see §4), so these are the raw quantile intervals, now *checked* out of sample per group. Likely starters are slightly over-covered because many score exactly their (whole-number) lower bound; others are over-covered because a non-playing player scores exactly 0. `reports/cqr_blocks.csv` lists the correction per block.
-
-### Robust dial (Gamma)
-
-![Robust dial](reports/figures/robust_frontier.png)
-
-| Gamma | Mean pts/GW | 10th-percentile week | Worst week |
-|---|---|---|---|
-| 0 | 58.5 | 33.7 | 18 |
-| 1 | 58.3 | 33.7 | 18 |
-| 2 | 58.3 | 33.7 | 18 |
-| 3 | 58.0 | 33.7 | 18 |
-| 4 | 58.9 | 37.1 | 18 |
-| 6 | 58.1 | 36.4 | 18 |
-| 8 | 57.1 | 35.5 | 18 |
-
-Every Gamma tested is shown. Gamma = 1-3 changes nothing; from Gamma = 4 the 10th-percentile week rises by 1.8 to 3.4 points at little or no cost to the mean, but the worst week never moves and the effect is not monotone. With 38 weeks, read it as suggestive, not proven. (Sweep: top 60 per position, 32-point theta grid.)
-
-**Choosing Gamma from data, not by hand.** A sweep invites picking the best Gamma after the fact. So the backtest also runs a rule declared in advance: each week, Gamma = the 80th percentile (the same 80% level as the intervals) of the uncertainty budget the risk-neutral XI *actually used* in previous weeks, where each player's shortfall counts as a share of his allowed downside, capped at 1, and summed over the XI. It switches on after 4 weeks and uses only gameweeks already played. This follows the idea of calibrating robustness levels from data (Zhou & Zhu 2025).
-
-| Strategy | Mean pts/GW | 10th-percentile week | Worst week |
-|---|---|---|---|
-| Risk-neutral (Gamma = 0) | 58.5 | 33.7 | 18 |
-| Calibrated Gamma (5-6 from GW 5) | 57.5 | **36.4** | 18 |
-
-The XI used a median of 4.5 players' worth of downside a week, so the rule settled on Gamma = 5-6. It gives up 0.9 points a week on average (paired bootstrap CI -2.9 to +1.1, not significant) for a 10th-percentile week 2.7 points higher, and **the robust team beat the floor it was built to guarantee in 31 of 34 weeks (91%, against an 80% target)**. The worst week is untouched: no budget-based protection saves a week where most of the XI blanks.
-
-### Sensitivity
-
-- The budget binds in 21 of 38 gameweeks, but its shadow price is small: a median of 0.09 expected points per extra GBP 1m in the weeks it binds (0.04 over all weeks).
-- The 3-per-club rule binds in 11 gameweeks, costing 2.9 expected points on average when it binds (0.85 over all weeks) and 15.5 in the worst, a double gameweek in which the uncapped team would have picked 9 Arsenal players.
-- The model's XI cost GBP 80.5m on average against the GBP 83.5m budget.
-
-### Monitoring (statistical process control)
+### Monitoring
 
 ![EWMA](reports/figures/ewma_monitor.png)
 
-An EWMA control chart (lambda = 0.2, 3-sigma limits) of weekly prediction error **flags defenders from gameweek 3**: the model under-predicts them because defensive-contribution points started in 2025-26 and the training seasons don't have them. The flag clears as walk-forward retraining absorbs 2025-26 data and the regime flag. The other positions stay in control.
+An EWMA control chart of weekly prediction error flags defenders from gameweek 3: the 2025-26 defensive-contribution points did not exist in the training seasons. The flag clears as retraining absorbs the new season.
 
-## 8. Design decisions and trade-offs
+### The full game: a 15-man squad through the season
 
-- **Real data over synthetic.** On the provided synthetic data, even a perfect-knowledge oracle beats a legal top-salary XI by only about 8%, so the 15% target was unreachable there by construction.
-- **XI + captain, single gameweek.** This matches the starter constraints and isolates forecast quality. The 15-man squad with transfers (a multi-period rebalancing problem with -4 per extra transfer) is the next step.
-- **Gradient boosting over deep learning:** tabular data, missing values, laptop-scale training, explainable feature effects.
-- **Robust via decomposition, not a bigger solver:** exact theory, fast, and testable against the direct formulation.
-- **Robust sweep on a prefiltered pool** (top 60 per position by expected points) with a 32-point theta grid, for speed; the app uses the full pool.
+A rolling-horizon MILP (`src/fplopt/planner.py`) plans the next H weeks for a 15-man squad within GBP 100m, with one free transfer a week (bankable to 5), −4 points per extra transfer and automatic substitutions, and makes only this week's moves. Horizon and transfer penalty were tuned on gameweeks 1–19 and judged on 20–38.
 
-## 9. Known limitations
+![Season](reports/figures/season_cumulative.png)
 
-- One test season (38 decisions); uplifts carry the wide CIs shown.
-- Candidates are players with a fixture in that gameweek, and prices are taken at that gameweek; both are known before the deadline. No bench, vice-captain or auto-substitutions.
-- Ownership and transfer signals are lagged one gameweek to stay safe, which likely leaves some injury information unused.
-- Points are predicted in total, not by component (goals, clean sheets, defensive contributions), so a rule change is learned only after it appears in the data. Component modelling is the roadmap fix the EWMA chart points to.
+- **The forecast matters.** With the planner's settings held fixed, the model's forecasts beat the 5-week average at 8 of 8 settings over the season (+172 points on average) and pay fewer or equal hit points (140 vs 228 at the real −4 cost, three-week horizon).
+- **The settings don't, detectably.** The ranking of settings on the first half did not carry over to the second (rank correlation −0.81), and every 19-week bootstrap interval includes zero, so no best horizon or penalty is claimed. One season is a single path; comparing settings over many restarted paths is the next step.
 
-## 10. Engineering
+### Foundation-model challenger (optional)
 
-- `src/fplopt/`: `data`, `features`, `model`, `optimise`, `baselines`, `backtest`, `monitor`, `reports`, `app` (Streamlit), plus `explain` (signal value), `audit` (xP forensics), `assistant` and `mcp_server` (AI-assistant tools).
-- `tests/` (pytest, 31 tests). **Property-based tests** (`tests/test_properties.py`, Hypothesis) generate random player pools and check that every solved team obeys every rule, that the MILP beats any random legal team, that more protection never raises the worst case, that the decomposition matches the direct robust MILP, that CQR reaches its coverage, and that the Diebold-Mariano test behaves. Hypothesis already caught a too-weak test of my own and shrank it to a one-line counter-example. **Assistant tests** check the AI tools never return an illegal team, honour locks, match names typed without special letters ("Odegaard" finds Ødegaard) and fail loudly on unknown or ambiguous players. The original unit tests: every team obeys every rule; every baseline obeys every rule; an infeasible budget raises a clear error; Gamma = 0 equals the risk-neutral team; the robust team cuts the worst-case exposure; locks and exclusions hold; the decomposition matches the direct robust MILP; CQR reaches its target coverage; the EWMA flags a persistent shift; one row per player-gameweek; no feature sees the future; rolling means use earlier rows only.
-- **Hosted demo kit:** `scripts/build_hf_space.py` packages the app, its modules and the precomputed reports as a Hugging Face Docker Space (`deploy/hf_space/`); upload instructions are in Quick start.
-- **CI:** GitHub Actions runs the tests on Python 3.11 and 3.12 on every push, plus a CLI smoke test. **Codespaces:** `.devcontainer/` installs everything and starts the demo.
-- **AI-assistant interface (MCP).** `python main.py mcp` serves four tools over the Model Context Protocol: `pick_team`, `explain_player`, `compare_risk`, `backtest_summary`. `.vscode/mcp.json` (GitHub Copilot agent mode) and `.mcp.json` (Claude Code) register it automatically when the repo is opened. The design rule: **the language model only interprets the request and chooses the tool; every number comes from the saved forecasts and an exact MILP**, so the assistant cannot invent a points figure or an illegal team. The same pattern suits a bank: the LLM is the interface, the governed model and optimiser are the engine.
-- **Scalability:** sparse constraint matrices; a single-gameweek solve grows linearly with players (about 0.1 s for 750); walk-forward training is about 15 s per block; the full rebuild takes about 10 minutes on two CPU cores. A multi-week horizon would roll, keeping each MILP small.
+`scripts/tabicl_challenger.py` runs TabICL v2, an open tabular foundation model, on the same walk-forward blocks (gameweeks 20–38). On a CPU it reads only the 4,000 most recent rows, so a gradient-boosting model on the same rows is the fair control.
 
-## 11. Starter-code issues found (and avoided)
+| Forecast | Training rows | RMSE | Team points per GW |
+|---|---|---|---|
+| Two-stage model | ~80,000 | 1.86 | 64.4 |
+| TabICL v2 | 4,000 | 1.89 | 50.9 |
+| Gradient boosting, same rows | 4,000 | 1.99 | 47.5 |
 
-- The baselines ignore the constraints (the top-salary XI costs 130 against a budget of 100; the last-week XI picks 4 goalkeepers; only 69 of 2,000 random teams were feasible).
-- `load_historical_data` returns Poisson(5) points unrelated to anything.
-- In `generate_player_stats`, form is independent noise, so recent form carries no signal.
-- `generate_multi_seasonal` peaks 12 hours after the run starts, not at 17:00.
-- `requirements.txt` is referenced but missing.
+TabICL is data-efficient on RMSE but its teams trail the two-stage model by 13.5 points a week (CI +3.5 to +22.9): structure and history matter more than model class here.
 
-## 12. Related work (checked on Hugging Face Papers and arXiv, Oct 2026)
+## Design decisions and limitations
 
-| Work | What it is | How it relates here |
-|---|---|---|
-| Groos (2025), OpenFPL, [arXiv:2508.09992](https://arxiv.org/abs/2508.09992) | Open-source FPL point forecasts (XGBoost + random forest ensembles) rivalling a paid service | Same data source; I adopt its outcome buckets for evaluation |
-| Ramezani & Dinh, [arXiv:2505.02170](https://arxiv.org/abs/2505.02170) | MILP team selection, box-uncertainty robust variant, GBP 83.5m XI budget | Budget convention; I replace the box set with a calibrated Bertsimas-Sim budget |
-| Adjileye (2024), RisingBALLER, [arXiv:2410.00943](https://huggingface.co/papers/2410.00943) | Transformer "player as token" embeddings for next-match statistics | A route to richer player features; needs event data I don't use |
-| Grady et al. (2026), KellyBench, [arXiv:2604.27865](https://huggingface.co/papers/2604.27865) | Frontier LLMs as agents in a simulated 2023-24 Premier League betting season: all lost money on average (best -8%) | Why the MCP assistant only routes requests: the decision engine stays a tested model and an exact optimiser |
-| Qu et al. (2025), TabICL, [arXiv:2502.05564](https://huggingface.co/papers/2502.05564); checkpoint [jingang/TabICL](https://huggingface.co/jingang/TabICL) (BSD-3; v2 adds regression, arXiv:2602.11139) | Tabular foundation model scaling in-context learning to ~500K rows | The natural foundation-model challenger to gradient boosting; not run here (weights need a download this offline build avoids) |
-| Gibbs & Candès (2021), adaptive conformal inference, [arXiv:2106.00170](https://huggingface.co/papers/2106.00170) | Online conformal intervals with long-run coverage under arbitrary drift | The upgrade for in-season drift such as the DefCon rule change |
-| Zhou & Zhu (2025), [arXiv:2510.07750](https://huggingface.co/papers/2510.07750) | Distribution-free calibration of robustness levels in robust predict-then-optimise | Motivates choosing Gamma from data (§7) rather than by hand |
-| Mandi et al. (2023), decision-focused learning survey, [arXiv:2307.13565](https://huggingface.co/papers/2307.13565) | Training predictors on decision loss | The roadmap step after the signal-value analysis |
+- **Real data.** On the provided synthetic data even a perfect-foresight team beats the most expensive legal XI by only ~8%, so a 15% improvement target could not be met honestly.
+- **Gradient boosting over deep learning:** tabular data, native missing values, seconds to train on a laptop.
+- **One test season** (38 decisions), so intervals are wide; both are reported.
+- The weekly backtest picks an XI and captain; the bench, vice-captain and substitutions appear only in the season planner.
+- Ownership and transfer signals are lagged a week, because their timing is not confirmed.
+- Points are predicted in total, not by component, so a scoring-rule change is learned only after it shows up in the data.
+- **Next:** decision-focused training (SPO+ loss), component-level scoring, chips and sell-price rules in the season planner.
 
-## 13. Roadmap
+## Repository
 
-Multi-week squad and transfer planning (rolling horizon); component-level scoring to absorb rule changes; an opponent-strength model; chips; same-gameweek transfer and ownership signals once their timing is confirmed; **decision-focused training** (training the forecaster on the SPO+ loss rather than RMSE, which §7 suggests would pay off); a tabular foundation model (TabPFN-2.5) as a challenger, once its 50,000-row limit and non-commercial licence allow.
+```
+main.py                 command-line entry point
+src/fplopt/             data, features, model, optimise, baselines, backtest, monitor, reports,
+                        explain, audit, planner, season, app (Streamlit), assistant + mcp_server (MCP tools)
+tests/                  37 tests: rules, leakage, calibration, planner, Hypothesis property tests
+reports/                committed results, forecasts and figures (the demo runs from these)
+data/raw/               FPL Historical Dataset, 2022-23 to 2025-26 (MIT)
+scripts/                data download, TabICL challenger, Hugging Face Space packaging
+```
 
-## Sources
+**AI-assistant interface.** `python main.py mcp` exposes `pick_team`, `explain_player`, `compare_risk` and `backtest_summary` over the Model Context Protocol (registered in `.vscode/mcp.json`). The language model only chooses the tool; every number comes from the saved forecasts and the MILP, so it cannot invent a points figure or an illegal team.
 
-- Anand, V. *FPL Historical Dataset* (MIT): https://github.com/vaastav/Fantasy-Premier-League
-- Bertsimas, D. & Sim, M. (2004). The price of robustness. *Operations Research* 52(1):35-53.
-- Bertsimas, D. & Sim, M. (2003). Robust discrete optimization and network flows. *Mathematical Programming* 98:49-71.
-- Lee, T. & Kwon, C. (2014). A short note on the robust combinatorial optimization problems with cardinality constrained uncertainty. *4OR* 12(4):373-378.
-- Romano, Y., Patterson, E. & Candès, E. (2019). Conformalized quantile regression. NeurIPS 2019, arXiv:1905.03222.
-- NIST/SEMATECH e-Handbook, EWMA control charts: https://itl.nist.gov/div898/handbook/pmc/section3/pmc324.htm
-- Groos (2025), OpenFPL: https://arxiv.org/html/2508.09992v1 · Ramezani & Dinh, team selection in FPL: https://arxiv.org/html/2505.02170v3 · Hunter, Vielma & Zaman, integer programming for fantasy sports: https://arxiv.org/abs/1604.01455v3
-- FPL 2026/27 rules: https://www.beatfpl.com/guides/fpl-26-27-rules-changes
-- Johnstone, C. & Cox, B. (2021). Conformal uncertainty sets for robust optimization. *PMLR* 152:72-90: https://proceedings.mlr.press/v152/johnstone21a.html
-- Patel, Y., Rayan, S. & Tewari, A. (2024). Conformal contextual robust optimization. AISTATS, *PMLR* 238: https://proceedings.mlr.press/v238/patel24a.html
-- Elmachtoub, A. & Grigas, P. (2022). Smart "Predict, then Optimize". *Management Science* 68(1):9-26.
-- Diebold, F. & Mariano, R. (1995). Comparing predictive accuracy. *Journal of Business & Economic Statistics* 13(3):253-263. Harvey, D., Leybourne, S. & Newbold, P. (1997). Testing the equality of prediction mean squared errors. *International Journal of Forecasting* 13(2):281-291.
-- Breiman, L. (2001). Random forests. *Machine Learning* 45:5-32. Fisher, A., Rudin, C. & Dominici, F. (2019). All models are wrong, but many are useful. *JMLR* 20(177).
-- TabPFN-2.5 (Prior Labs), arXiv:2511.08667: https://alphaxiv.org/abs/2511.08667
-- Model Context Protocol Python SDK: https://github.com/modelcontextprotocol/python-sdk · Hypothesis: https://hypothesis.readthedocs.io
+**Built for** a technical case study (fantasy sports team optimiser), extended afterwards: see [CHANGELOG.md](CHANGELOG.md). The provided starter code's baselines broke the budget and position rules, and its synthetic points were unrelated to the player data, so neither was used.
 
-**AI use.** Research, scoping and code drafting were assisted by Claude (Anthropic). All results were re-run locally from the committed data; design decisions, final code and conclusions are my own.
+## References
+
+- Anand, V. *FPL Historical Dataset* (MIT). https://github.com/vaastav/Fantasy-Premier-League
+- Bertsimas, D. & Sim, M. (2003). Robust discrete optimization and network flows. *Mathematical Programming* 98:49–71; (2004) The price of robustness. *Operations Research* 52(1):35–53.
+- Lee, T. & Kwon, C. (2014). Robust combinatorial optimization with cardinality constrained uncertainty. *4OR* 12(4):373–378.
+- Romano, Y., Patterson, E. & Candès, E. (2019). Conformalized quantile regression. NeurIPS.
+- Johnstone, C. & Cox, B. (2021). Conformal uncertainty sets for robust optimization. *PMLR* 152:72–90.
+- Diebold, F. & Mariano, R. (1995). Comparing predictive accuracy. *JBES* 13(3):253–263; Harvey, Leybourne & Newbold (1997), *IJF* 13(2):281–291.
+- Elmachtoub, A. & Grigas, P. (2022). Smart "Predict, then Optimize". *Management Science* 68(1):9–26.
+- Smith, J. & Winkler, R. (2006). The optimizer's curse. *Management Science* 52(3):311–322.
+- Groos, J. (2025). OpenFPL. arXiv:2508.09992. Ramezani & Dinh (2025). arXiv:2505.02170.
+- Zhou & Zhu (2025). Calibrating robustness levels in predict-then-optimise. arXiv:2510.07750.
+- Qu, J. et al. (2025). TabICL. ICML; TabICLv2 (2026), arXiv:2602.11139.
+- NIST/SEMATECH e-Handbook: EWMA control charts.
+
+AI use: Claude (Anthropic) assisted with research and code drafting; every result was re-run from the committed data, and the design decisions and conclusions are my own.

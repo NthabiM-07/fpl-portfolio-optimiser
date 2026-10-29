@@ -101,7 +101,7 @@ def pick_team(gameweek: int, budget_m: float = 83.5, risk_gamma: int = 0, must_i
                 "expected_points": round(r.mu, 2), "interval_80": [round(max(r.lo, 0), 1), round(r.hi, 1)],
                 "p_60_minutes": round(r.p_play60, 2), "captain": int(i) == t.captain,
                 **({"actual_points": int(r.total_points)} if reveal_actual else {})}
-               for i, r in zip(xi.index, xi.itertuples())]
+               for i, r in zip(xi.index, xi.itertuples(), strict=True)]
     out = {"gameweek": gameweek, "budget_m": budget_m, "risk_gamma": risk_gamma, "players": players,
            "expected_points_captain_doubled": round(_expected(c, t), 1),
            "cost_m": round(float(c["value"].to_numpy()[t.idx].sum()) / 10, 1),

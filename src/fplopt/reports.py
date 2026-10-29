@@ -11,8 +11,15 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from .audit import xp_audit  # noqa: E402
-from .backtest import (cqr_blocks, forecast_dm_table, forecast_table, interval_table,  # noqa: E402
-                       robust_calibrated_table, significance_table, strategy_table)
+from .backtest import (  # noqa: E402
+    cqr_blocks,
+    forecast_dm_table,
+    forecast_table,
+    interval_table,
+    robust_calibrated_table,
+    significance_table,
+    strategy_table,
+)
 from .config import FIGURES_DIR, REPORTS_DIR  # noqa: E402
 from .monitor import ewma_chart, weekly_error_by_position  # noqa: E402
 
@@ -25,7 +32,9 @@ LABELS = {"model": "Two-stage model + MILP", "model_single": "Single GBM + MILP"
 def to_markdown(df: pd.DataFrame) -> str:
     """Small Markdown table writer (avoids an extra dependency)."""
     cols = list(df.columns)
-    fmt = lambda v: f"{v:.3f}".rstrip("0").rstrip(".") if isinstance(v, (float, np.floating)) else str(v)
+    def fmt(v) -> str:
+        return f"{v:.3f}".rstrip("0").rstrip(".") if isinstance(v, (float, np.floating)) else str(v)
+
     lines = ["| " + " | ".join(map(str, cols)) + " |", "|" + "---|" * len(cols)]
     lines += ["| " + " | ".join(fmt(v) for v in row) + " |" for row in df.itertuples(index=False)]
     return "\n".join(lines)
@@ -33,7 +42,8 @@ def to_markdown(df: pd.DataFrame) -> str:
 
 def _style(ax, title, xlabel, ylabel):
     ax.set_title(title, loc="left", fontsize=12, fontweight="bold")
-    ax.set_xlabel(xlabel); ax.set_ylabel(ylabel)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(axis="y", color="#E3E6E1", linewidth=0.8)
 
@@ -105,7 +115,9 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
                     textcoords="offset points", fontsize=8, color=COLORS[st], va="center")
     _style(ax, "Cumulative XI points, 2025-26 (same optimiser and rules for every strategy)", "Gameweek", "Cumulative points")
     ax.set_xlim(1, gw["GW"].max() + 9)
-    fig.tight_layout(); fig.savefig(FIGURES_DIR / "cumulative_points.png", dpi=150); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "cumulative_points.png", dpi=150)
+    plt.close(fig)
 
     st = tabs["strategies_all_gws"].set_index("strategy").drop(index="oracle")
     sig = tabs["significance_all_gws"].set_index("model_vs")
@@ -113,17 +125,20 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
     order = ["model", "model_single", "mean_last5", "last_week", "top_price", "random"]
     vals = st.loc[order, "mean_pts_per_gw"]
     ax.barh([LABELS[o] for o in order][::-1], vals[::-1], color=[COLORS[o] for o in order][::-1])
-    for i, (o, v) in enumerate(zip(order[::-1], vals[::-1])):
+    for i, (o, v) in enumerate(zip(order[::-1], vals[::-1], strict=True)):
         txt = f"{v:.1f}"
         if o in sig.index:
             r = sig.loc[o]
             txt += f"   (model +{r.mean_diff_pts_per_gw:.1f}, 95% CI {r.ci95_low:+.1f} to {r.ci95_high:+.1f})"
         ax.text(v + 0.5, i, txt, va="center", fontsize=8.5)
     _style(ax, "Mean realised XI points per gameweek, 2025-26 (all 38 GWs, captain doubled)", "Points per gameweek", "")
-    ax.grid(axis="x", color="#E3E6E1"); ax.grid(axis="y", visible=False)
+    ax.grid(axis="x", color="#E3E6E1")
+    ax.grid(axis="y", visible=False)
     ax.set_axisbelow(True)
     ax.set_xlim(0, vals.max() * 1.75)
-    fig.tight_layout(); fig.savefig(FIGURES_DIR / "mean_points.png", dpi=150); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "mean_points.png", dpi=150)
+    plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(8, 4.2))
     base = rsum.set_index("gamma").loc[0]
@@ -131,7 +146,7 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
     dm, dp = rsum["mean"] - base["mean"], rsum["p10"] - base["p10"]
     ax.bar(x - 0.2, dp, 0.4, color=COLORS["model"], label="Change in 10th-percentile week (downside)")
     ax.bar(x + 0.2, dm, 0.4, color=COLORS["random"], label="Change in mean week")
-    for xi, a, b in zip(x, dp, dm):
+    for xi, a, b in zip(x, dp, dm, strict=True):
         ax.text(xi - 0.2, a + (0.1 if a >= 0 else -0.1), f"{a:+.1f}", ha="center", va="bottom" if a >= 0 else "top", fontsize=8)
         ax.text(xi + 0.2, b + (0.1 if b >= 0 else -0.1), f"{b:+.1f}", ha="center", va="bottom" if b >= 0 else "top", fontsize=8)
     ax.axhline(0, color="#3A403C", lw=0.8)
@@ -141,10 +156,12 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
     _style(ax, "Robust dial vs Γ=0: downside protection bought per point of mean given up", "Budget of uncertainty Γ",
            "Points per gameweek vs Γ=0")
     ax.set_axisbelow(True)
-    fig.tight_layout(); fig.savefig(FIGURES_DIR / "robust_frontier.png", dpi=150); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "robust_frontier.png", dpi=150)
+    plt.close(fig)
 
     fig, axes = plt.subplots(2, 2, figsize=(9, 5.2), sharex=True)
-    for ax, p in zip(axes.ravel(), ["GK", "DEF", "MID", "FWD"]):
+    for ax, p in zip(axes.ravel(), ["GK", "DEF", "MID", "FWD"], strict=True):
         e = ew[p]
         ax.plot(err.index, e["error"], color="#C9CCC8", lw=1, label="weekly mean error")
         ax.plot(err.index, e["ewma"], color=COLORS["model"], lw=2, label="EWMA (λ=0.2)")
@@ -154,7 +171,9 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
         ax.scatter(sig_gw, e.loc[e["signal"], "ewma"], color=COLORS["last_week"], zorder=3, s=14)
         _style(ax, p, "Gameweek" if p in ("MID", "FWD") else "", "Actual − predicted")
     fig.suptitle("Model monitoring: EWMA control chart of weekly prediction error, 2025-26", x=0.02, ha="left", fontweight="bold")
-    fig.tight_layout(); fig.savefig(FIGURES_DIR / "ewma_monitor.png", dpi=150); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "ewma_monitor.png", dpi=150)
+    plt.close(fig)
 
     summary = {k: v.round(4).to_dict(orient="records") for k, v in tabs.items()}
     summary["xp_audit_gws"] = tabs["xp_audit"].attrs.get("gws", [])
@@ -180,8 +199,12 @@ def write_signal_value(sv: pd.DataFrame) -> None:
     axes[1].barh(t["family"], t["xi_points_lost_per_gw"], xerr=t["xi_points_lost_sd"], color=COLORS["model"], ecolor="#3A403C")
     axes[1].set_title("XI points lost per gameweek", loc="left", fontsize=10, fontweight="bold")
     for ax in axes:
-        ax.spines[["top", "right"]].set_visible(False); ax.grid(axis="x", color="#E3E6E1"); ax.set_axisbelow(True)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(axis="x", color="#E3E6E1")
+        ax.set_axisbelow(True)
         ax.axvline(0, color="#3A403C", lw=0.8)
     fig.suptitle(f"Scrambling each signal family (10 shuffles, GW {sv.attrs['gws']}): cost to the forecast and to the decision",
                  x=0.02, ha="left", fontweight="bold")
-    fig.tight_layout(); fig.savefig(FIGURES_DIR / "signal_value.png", dpi=150); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "signal_value.png", dpi=150)
+    plt.close(fig)

@@ -1,9 +1,6 @@
-"""Model Context Protocol server: lets an AI assistant (Claude, GitHub Copilot, any MCP client) call
-the optimiser as a tool. Start it with `python main.py mcp` (stdio transport).
+"""Model Context Protocol server: lets any MCP-capable AI assistant call the optimiser as a tool.
 
-Register it, for example:
-    Claude Code:   claude mcp add fpl -- python main.py mcp
-    VS Code:       .vscode/mcp.json (in this repo)
+Start it with `python main.py mcp` (stdio transport); VS Code picks it up from `.vscode/mcp.json`.
 Then ask: "Pick my GW 20 team under GBP 80m without Haaland, and show me the safer option."
 """
 from __future__ import annotations

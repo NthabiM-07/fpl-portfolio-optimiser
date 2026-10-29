@@ -33,7 +33,8 @@ def load():
     rob = pd.read_csv(REPORTS_DIR / "robust_results.csv")
     tabs = {n: pd.read_csv(REPORTS_DIR / f"{n}.csv") for n in
             ["strategies_all_gws", "strategies_gw6_38", "significance_all_gws", "forecast_accuracy", "interval_coverage", "sensitivity"]}
-    for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks", "robust_calibrated"]:  # optional extras
+    for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks", "robust_calibrated",
+              "season_summary", "season_gw", "season_tuning", "season_selected_detail", "season_matched"]:  # optional extras
         f = REPORTS_DIR / f"{n}.csv"
         tabs[n] = pd.read_csv(f) if f.exists() else None
     return pred, gw, rob, tabs
@@ -69,7 +70,8 @@ with st.sidebar:
     lock = st.multiselect("Must include", labels)
     excl = st.multiselect("Exclude", labels)
 
-tab_pick, tab_bt, tab_risk, tab_model, tab_sens = st.tabs(["Team", "Backtest", "Risk dial", "Model quality", "Sensitivity"])
+tab_pick, tab_bt, tab_season, tab_risk, tab_model, tab_sens = st.tabs(
+    ["Team", "Backtest", "Season (full rules)", "Risk dial", "Model quality", "Sensitivity"])
 
 with tab_pick:
     d = (c["mu"] - c["lo"]).clip(lower=0).to_numpy()
@@ -89,7 +91,7 @@ with tab_pick:
     cols = ["C", "name", "position", "team", "price", "mu", "80% interval", "p_play60", "pts per GBP m"] + (["total_points"] if show_actual else [])
     st.subheader(f"Gameweek {gw}: optimal XI at GBP {budget:.1f}m, Γ = {gamma}")
     st.dataframe(xi[cols].rename(columns={"mu": "expected pts", "p_play60": "P(60+ min)", "total_points": "actual pts"}).round(2),
-                 hide_index=True, use_container_width=True, height=36 * 12 + 4)
+                 hide_index=True, width="stretch", height=36 * 12 + 4)
     m = st.columns(4)
     m[0].metric("Expected points (captain doubled)", f"{c['mu'].to_numpy()[team.idx].sum() + c['mu'].to_numpy()[team.captain]:.1f}")
     m[1].metric("Cost", f"GBP {xi['price'].sum():.1f}m")
@@ -122,7 +124,7 @@ with tab_bt:
                   color_discrete_map={NAMES["model"]: GREEN, NAMES["mean_last5"]: BLUE, NAMES["last_week"]: RED,
                                       NAMES["top_price"]: "#8C6D31", NAMES["random"]: GREY},
                   title="Cumulative realised XI points, 2025-26")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     a, b = st.columns(2)
     a.markdown("**Mean points per gameweek (all 38 GWs)**")
     a.dataframe(tabs["strategies_all_gws"].assign(strategy=lambda t: t.strategy.map(NAMES)).round(1), hide_index=True)
@@ -130,6 +132,39 @@ with tab_bt:
     b.dataframe(tabs["significance_all_gws"].assign(model_vs=lambda t: t.model_vs.map(NAMES)).round(2), hide_index=True)
     st.markdown("**Gameweeks 6-38 only** (pre-declared secondary view)")
     st.dataframe(tabs["strategies_gw6_38"].assign(strategy=lambda t: t.strategy.map(NAMES)).round(1), hide_index=True)
+
+with tab_season:
+    if tabs["season_summary"] is None:
+        st.info("Run `python main.py season` to add the full-rules season backtest.")
+    else:
+        st.markdown("**The real game:** a 15-man squad (2 GK, 5 DEF, 5 MID, 3 FWD) within GBP 100m, one free transfer a "
+                    "week (bank up to 5), 4 points per extra transfer, automatic substitutions. Each week a rolling-horizon "
+                    "MILP plans the next weeks and only this week's moves are made. The horizon and the transfer hurdle were "
+                    "chosen on gameweeks 1-19; gameweeks 20-38 are the honest test.")
+        sg = tabs["season_gw"]
+        long = sg.melt(id_vars="GW", var_name="strategy", value_name="points")
+        long["cumulative"] = long.groupby("strategy")["points"].cumsum()
+        fig = px.line(long, x="GW", y="cumulative", color="strategy", title="Cumulative points after hits, 2025-26")
+        fig.add_vline(x=19.5, line_dash="dot", line_color=GREY)
+        st.plotly_chart(fig, width="stretch")
+        st.dataframe(tabs["season_summary"].round(1), hide_index=True)
+        if tabs["season_matched"] is not None:
+            m = tabs["season_matched"]
+            st.markdown(f"**Same settings, two forecasts.** The model's forecasts beat the 5-week mean at "
+                        f"{(m.model_minus_naive_season > 0).sum()} of {len(m)} horizon/hurdle settings over the season "
+                        f"(average {m.model_minus_naive_season.mean():.0f} points) and at "
+                        f"{(m.model_minus_naive_gw20_38 > 0).sum()} of {len(m)} on gameweeks 20-38.")
+            st.dataframe(m.round(0), hide_index=True)
+        st.markdown("**Tuning on gameweeks 1-19** (planning penalty per extra transfer = the hurdle; FPL charges 4)")
+        st.dataframe(tabs["season_tuning"].round(1), hide_index=True)
+        st.caption("The ranking of settings on gameweeks 1-19 did not carry over to 20-38, so in one season the "
+                   "horizon and hurdle are within the noise; the forecast is what matters. Hit points grow with forecast "
+                   "noise: at the real 4-point cost the 5-week mean pays far more in hits than the model, because the "
+                   "forecasts a planner acts on tend to be too high (the optimiser's curse) and noisier forecasts make "
+                   "more false alarms.")
+        if tabs["season_selected_detail"] is not None:
+            with st.expander("Week-by-week moves of the selected strategy"):
+                st.dataframe(tabs["season_selected_detail"].round(1), hide_index=True)
 
 with tab_risk:
     fr = rob.groupby("gamma")["realised"].agg(mean="mean", p10=lambda x: x.quantile(0.1), worst="min").reset_index()
@@ -143,7 +178,7 @@ with tab_risk:
                 marker_color=GREY, text=fr["change in mean week"].round(1), textposition="outside")
     fig.update_layout(barmode="group", title="Robust dial vs \u0393=0: downside protection bought per point of mean given up",
                       yaxis_title="Points per gameweek vs \u0393=0")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.dataframe(fr.round(1), hide_index=True)
     st.caption("Γ = how many players may fall to the bottom of their 80% interval at once. The MILP protects against the worst Γ of them. "
                "Robust picks are solved on the top 60 candidates per position by expected points, on a 32-point θ grid. "
@@ -161,7 +196,9 @@ with tab_model:
     if tabs["forecast_dm"] is not None:
         st.markdown("**Is the forecast error significantly lower? Diebold-Mariano test across the 38 gameweeks** "
                     "(losses averaged within each gameweek; Newey-West variance; HLN correction)")
-        fmt_p = lambda v: "<0.0001" if v < 1e-4 else f"{v:.4f}"
+        def fmt_p(v: float) -> str:
+            return "<0.0001" if v < 1e-4 else f"{v:.4f}"
+
         st.dataframe(tabs["forecast_dm"].assign(p_se=lambda t: t.p_se.map(fmt_p), p_ae=lambda t: t.p_ae.map(fmt_p)).round(2),
                      hide_index=True)
         st.caption("Against the single GBM the gain is not significant on squared error (significant on absolute error), yet "
@@ -176,7 +213,7 @@ with tab_model:
                     marker_color=GREEN, error_x=dict(type="data", array=sv["xi_points_lost_sd"]))
         fig.update_layout(title="XI points lost per gameweek when the family is scrambled (GW 20-38, ±1 sd over 10 shuffles)",
                           xaxis_title="Points per gameweek", height=380, margin=dict(l=10))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         st.dataframe(tabs["signal_value"].round(3), hide_index=True)
     if tabs["xp_audit"] is not None:
         with st.expander("Leakage forensics: why FPL's own xP column is excluded"):
@@ -202,13 +239,13 @@ with tab_model:
     for lim in ("ucl", "lcl"):
         fig.add_hline(y=float(e[lim].iat[0]), line_dash="dash", line_color=RED)
     fig.update_layout(title=f"EWMA control chart of prediction error: {pos}", xaxis_title="Gameweek", yaxis_title="Actual − predicted points")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 with tab_sens:
     st.dataframe(tabs["sensitivity"].round(3), hide_index=True)
     fig = px.bar(gwres, x="GW", y="club_cap_cost_pred", title="Expected points the 3-per-club rule costs each gameweek",
                  color_discrete_sequence=[GREEN])
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     fig = px.bar(gwres, x="GW", y="budget_shadow_pts_per_m", title="Budget shadow price: expected points per extra GBP 1m (LP relaxation)",
                  color_discrete_sequence=[BLUE])
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
