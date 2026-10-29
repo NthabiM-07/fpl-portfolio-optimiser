@@ -1,4 +1,6 @@
 """The multi-week planner must keep every FPL squad rule and count free transfers and hits correctly."""
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -62,9 +64,38 @@ def test_autosubs_keep_a_legal_formation_and_vice_captain_steps_in():
 
 
 def test_one_short_season_keeps_the_rules_every_week():
-    pred = pd.read_csv("reports/predictions_2025-26.csv.gz")
+    pred = pd.read_csv(Path(__file__).resolve().parents[1] / "reports" / "predictions_2025-26.csv.gz")
     r = simulate_season(pred[pred["GW"] <= 3], "mu", PlanConfig(horizon=2))
     assert len(r) == 3
     assert (r["bank_m"] >= -1e-9).all()               # never overspends (squad value may grow with price rises)
     assert (r["free_transfers_next"].between(1, 5)).all()
     assert (r["hits"] % 4 == 0).all() and (r["hits"] >= 0).all() and r.loc[r["GW"] == 1, "hits"].eq(0).all()
+
+
+def test_banked_free_transfers_cover_several_moves_and_hits_are_never_bought():
+    mu, price, pos, club = _pool(2)
+    first = plan_transfers(mu, price, pos, club, np.zeros(len(pos)), 15, 1000.0, PlanConfig())
+    current = np.zeros(len(pos)); current[first.squad] = 1
+    mu2 = mu.copy()
+    mu2[:, [i for i in first.xi if pos[i] != "GK"][:3]] = 0.0
+    banked = plan_transfers(mu2, price, pos, club, current, 3, 1000.0, PlanConfig(hit_cost=4))
+    assert banked.paid == max(0, len(banked.buys) - 3)          # up to 3 moves are free
+    eager = plan_transfers(mu2, price, pos, club, current, 1, 1000.0, PlanConfig(hit_cost=0.5, decay=1.0, ft_value=3.0))
+    assert eager.paid == max(0, len(eager.buys) - 1)              # never pays a hit while a free transfer is unused
+
+
+def test_goalkeeper_is_only_replaced_by_the_bench_goalkeeper_and_a_blank_captain_passes_the_armband():
+    pos = {"g1": "GK", "g2": "GK", **{f"d{i}": "DEF" for i in range(5)}, **{f"m{i}": "MID" for i in range(5)},
+           **{f"f{i}": "FWD" for i in range(3)}}
+    squad = list(pos)
+    xi = ["g1", "d0", "d1", "d2", "m0", "m1", "m2", "m3", "f0", "f1", "f2"]
+    mins = {k: 90 for k in squad}
+    mins["g1"] = 0
+    pts = {k: 1 for k in squad}
+    pts.update({"g2": 7, "f0": 9})
+    mu = {k: 1.0 for k in squad}
+    total, subs = autosub_points(squad, xi, "f0", "m0", pts, mins, pos, mu)
+    assert subs == 1 and total == 7 + 9 * 2 + 9 * 1          # g2 in for g1; captain f0 played, so doubled
+    mins["f0"] = 0
+    total, subs = autosub_points(squad, xi, "f0", "m0", pts, mins, pos, mu)
+    assert total == 7 + 10 * 1 + 1                            # an outfielder replaces f0; vice-captain m0 doubles

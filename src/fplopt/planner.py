@@ -10,9 +10,12 @@ control, as in production planning):
          starting XI: x_ih <= s_ih, 11 players in a legal formation; one captain c_ih <= x_ih
          transfers:  paid_h >= sum_i buy_ih - ft_h                      (each extra costs 4 points)
                      ft_h+1 <= ft_h - (sum_i buy_ih - paid_h) + 1,  ft <= 5   (bank up to 5)
+                     paid_h > 0 only once every free transfer is used (binary z_h), as in FPL,
+                     so a hit can never be "bought" to bank a transfer for later
 
-w_h = decay^h discounts later weeks, whose forecasts are weaker; v values a banked transfer at the
-end of the horizon so the plan doesn't burn transfers for nothing.
+The "4" in the objective is the planning hurdle `hit_cost`; the season simulation always charges
+the real 4. w_h = decay^h discounts later weeks, whose forecasts are weaker; v values a banked
+transfer at the end of the horizon so the plan doesn't burn transfers for nothing.
 
 Leakage: at gameweek t only the forecast made for t exists. Later weeks reuse each player's
 per-fixture rate (mu_t / fixtures_t) times his club's fixture count in that week, which the
@@ -75,7 +78,8 @@ def plan_transfers(mu: np.ndarray, price: np.ndarray, position: np.ndarray, club
     nv_week = 5 * n
     PAID = H * nv_week                              # paid_h, h = 0..H-1
     FT = PAID + H                                   # ft_h for h = 1..H  (ft_0 is a constant)
-    N = FT + H
+    HIT_ON = FT + H                                 # z_h = 1 if any hit is taken in week h
+    N = HIT_ON + H
 
     def v(h, kind, i):
         return h * nv_week + kind * n + i
@@ -111,6 +115,13 @@ def plan_transfers(mu: np.ndarray, price: np.ndarray, position: np.ndarray, club
             add([v(h, X, i) for i in m], [1.0] * len(m), a, b_)
         add([v(h, C, i) for i in ix], [1.0] * n, 1, 1)
         buys = [v(h, B, i) for i in ix]
+        # a hit may only be taken once every free transfer is used (no paying to bank a transfer):
+        # paid_h <= 15 z_h  and  free transfers left unused = ft_h - buys_h + paid_h <= 15 (1 - z_h)
+        add([PAID + h, HIT_ON + h], [1.0, -15.0], -np.inf, 0)
+        if h == 0:
+            add(buys + [PAID, HIT_ON], [-1.0] * n + [1.0, 15.0], -np.inf, 15.0 - free_transfers)
+        else:
+            add([FT + h - 1] + buys + [PAID + h, HIT_ON + h], [1.0] + [-1.0] * n + [1.0, 15.0], -np.inf, 15.0)
         # paid_h - sum(buy) + ft_h >= 0
         if h == 0:
             add([PAID] + buys, [1.0] + [-1.0] * n, -float(free_transfers), np.inf)
@@ -137,6 +148,8 @@ def plan_transfers(mu: np.ndarray, price: np.ndarray, position: np.ndarray, club
                options={"time_limit": cfg.time_limit, "mip_rel_gap": cfg.mip_rel_gap})
     if res.x is None:
         raise RuntimeError(f"planner found no feasible plan: {res.message}")
+    if res.status != 0:
+        log.warning("planner stopped early (%s); using the best plan found", res.message)
     x = res.x
     get = lambda kind: np.flatnonzero(x[kind * n: kind * n + n] > 0.5)
     return Plan(squad=get(S), xi=get(X), captain=int(get(C)[0]), buys=get(B), sells=get(D),
@@ -195,6 +208,7 @@ def simulate_season(pred: pd.DataFrame, score_col: str = "mu", cfg: PlanConfig |
         rate_now = (d[score_col].fillna(0) / d["n_fixtures"].clip(lower=1)).to_dict()
         last_rate.update(rate_now)
         future = [g for g in gws if g >= t][: (1 if hold and t > gws[0] else cfg.horizon)]
+        week_cfg = cfg if future[-1] < gws[-1] else PlanConfig(**{**cfg.__dict__, "ft_value": 0.0})  # no value after the season
 
         def fx(k, g):
             n_fx = team_fx.get((g, club_of.get(k)))
@@ -222,10 +236,10 @@ def simulate_season(pred: pd.DataFrame, score_col: str = "mu", cfg: PlanConfig |
         if hold and squad:
             sub = np.flatnonzero(current > 0)
             p = plan_transfers(mu[:1, sub], price[sub], position[sub], club[sub], np.ones(len(sub)), 0, 1e9,
-                               PlanConfig(**{**cfg.__dict__, "horizon": 1, "ft_value": 0.0}))
+                               PlanConfig(**{**cfg.__dict__, "horizon": 1, "ft_value": 0.0, "club_cap": 15}))
             p.squad, p.xi, p.captain, p.buys, p.sells = sub[p.squad], sub[p.xi], int(sub[p.captain]), np.array([], int), np.array([], int)
         else:
-            p = plan_transfers(mu, price, position, club, current, min(ft, 15), budget, cfg)
+            p = plan_transfers(mu, price, position, club, current, min(ft, 15), budget, week_cfg)
         new_squad = [keys[j] for j in p.squad]
         n_buys = len(p.buys)
         if squad:                                                    # bank and free transfers after this week
@@ -247,6 +261,6 @@ def simulate_season(pred: pd.DataFrame, score_col: str = "mu", cfg: PlanConfig |
         rows.append({"GW": t, "points": score - hits, "gross": score, "hits": hits, "transfers": n_buys if t > gws[0] else 0,
                      "free_transfers_next": ft, "bank_m": bank / 10, "squad_value_m": float(price[p.squad].sum()) / 10,
                      "autosubs": subs, "captain": d["name"].get(cap, cap) if cap in d.index else cap,
-                     "planned_points": p.objective})
+                     "plan_objective": p.objective})
         log.info("GW%d %s: %.0f pts (%d transfers, %.0f hit)", t, score_col, score - hits, rows[-1]["transfers"], hits)
     return pd.DataFrame(rows)

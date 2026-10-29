@@ -34,7 +34,7 @@ def load():
     tabs = {n: pd.read_csv(REPORTS_DIR / f"{n}.csv") for n in
             ["strategies_all_gws", "strategies_gw6_38", "significance_all_gws", "forecast_accuracy", "interval_coverage", "sensitivity"]}
     for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks", "robust_calibrated",
-              "season_summary", "season_gw", "season_tuning", "season_selected_detail"]:  # optional extras
+              "season_summary", "season_gw", "season_tuning", "season_selected_detail", "season_matched"]:  # optional extras
         f = REPORTS_DIR / f"{n}.csv"
         tabs[n] = pd.read_csv(f) if f.exists() else None
     return pred, gw, rob, tabs
@@ -148,11 +148,20 @@ with tab_season:
         fig.add_vline(x=19.5, line_dash="dot", line_color=GREY)
         st.plotly_chart(fig, use_container_width=True)
         st.dataframe(tabs["season_summary"].round(1), hide_index=True)
+        if tabs["season_matched"] is not None:
+            m = tabs["season_matched"]
+            st.markdown(f"**Same settings, two forecasts.** The model's forecasts beat the 5-week mean at "
+                        f"{(m.model_minus_naive_season > 0).sum()} of {len(m)} horizon/hurdle settings over the season "
+                        f"(average {m.model_minus_naive_season.mean():.0f} points) and at "
+                        f"{(m.model_minus_naive_gw20_38 > 0).sum()} of {len(m)} on gameweeks 20-38.")
+            st.dataframe(m.round(0), hide_index=True)
         st.markdown("**Tuning on gameweeks 1-19** (planning penalty per extra transfer = the hurdle; FPL charges 4)")
         st.dataframe(tabs["season_tuning"].round(1), hide_index=True)
-        st.caption("Charging the planner only the real 4-point cost makes it over-trade: every forecast it acts on is "
-                   "slightly too optimistic for the player it picks (the optimiser's curse), so it chases noise. A higher "
-                   "hurdle is a deadband, like not adjusting a stable process (Deming's funnel).")
+        st.caption("The ranking of settings on gameweeks 1-19 did not carry over to 20-38, so in one season the "
+                   "horizon and hurdle are within the noise; the forecast is what matters. Hit points grow with forecast "
+                   "noise: at the real 4-point cost the 5-week mean pays far more in hits than the model, because the "
+                   "forecasts a planner acts on tend to be too high (the optimiser's curse) and noisier forecasts make "
+                   "more false alarms.")
         if tabs["season_selected_detail"] is not None:
             with st.expander("Week-by-week moves of the selected strategy"):
                 st.dataframe(tabs["season_selected_detail"].round(1), hide_index=True)

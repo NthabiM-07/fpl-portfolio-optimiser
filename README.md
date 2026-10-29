@@ -7,13 +7,13 @@
 ![Mean points per gameweek](reports/figures/mean_points.png)
 
 **Beyond the brief:**
-- **The full game, not just one week.** A rolling-horizon MILP manages a 15-man squad through the whole season with free transfers, -4 hits and automatic substitutions. With its settings chosen on the first half of the season, it scores **2,090 points**, against 1,826 for keeping the opening squad and 1,728 for the same planner fed 5-week averages (§7).
+- **The full game, not just one week.** A rolling-horizon MILP manages a 15-man squad through the whole season with free transfers, -4 hits and automatic substitutions. With the planner's settings held fixed, the model's forecasts beat 5-week averages at **8 of 8 settings over the season (+172 points on average)** and pay fewer hits; which horizon or transfer hurdle is best is not detectable in one season (§7).
 - **Decision-focused evaluation.** Scrambling each signal family shows that RMSE badly understates some signals: market signals and fixtures barely move RMSE, yet scrambling them costs the picked team 7-8 points a week (§7).
 - **Calibrated robust optimisation.** Intervals are calibrated out of sample per playing-status group (Mondrian CQR) and feed a Bertsimas-Sim uncertainty budget whose size Gamma is itself chosen from past data by a rule declared in advance; the robust team beat its guaranteed floor in 31 of 34 weeks (§4, §5, §7).
 - **Leakage forensics.** I tested FPL's own `xP` column instead of trusting it. Its edge fades a week later and tracks same-week goals and bonus, which strongly suggests post-match information (§7).
 - **Forecast significance.** The model's forecast error is lower than both naive baselines in every one of the 38 gameweeks (Diebold-Mariano, p < 0.0001).
 - **An AI-assistant interface.** An MCP server lets Claude or GitHub Copilot call the optimiser ("pick my GW 20 team under GBP 80m without Haaland"). The LLM routes the request; every number comes from the MILP (§10).
-- **Engineering.** 35 tests including Hypothesis property-based tests, GitHub Actions CI, and a dev container that opens the demo in Codespaces.
+- **Engineering.** 37 tests including Hypothesis property-based tests, GitHub Actions CI, and a dev container that opens the demo in Codespaces.
 
 ---
 
@@ -23,10 +23,10 @@
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python main.py app            # interactive demo, runs offline from reports/ (about 10 seconds)
-pytest -q                     # 35 tests (unit + property-based), about 1.5 minutes
+pytest -q                     # 37 tests (unit + property-based), about 1.5 minutes
 python main.py backtest       # optional: rebuild everything from raw data (about 10 minutes on a laptop)
 python main.py explain        # optional: decision-focused signal importance (about 3 minutes)
-python main.py season         # optional: full FPL rules over the season, 15-man squad and transfers (about 4 minutes)
+python main.py season         # optional: full FPL rules over the season, 15-man squad and transfers (about 3 minutes)
 python main.py pick --gw 20 --gamma 4     # print a robust XI for one gameweek
 python main.py mcp            # serve the optimiser to an AI assistant (see §10)
 ```
@@ -231,27 +231,39 @@ The tables above give the optimiser a fresh XI every week. The real game is hard
 max  sum_h w_h * sum_i mu_ih (x_ih + c_ih)  -  hurdle * sum_h w_h * paid_h  +  v * banked_free_transfers
 s.t. 15-man squad, positions, <= 3 per club, value <= budget;  s_ih = s_i,h-1 + buy_ih - sell_ih
      legal starting XI and captain inside the squad;  paid_h >= buys_h - free_h;  free_{h+1} <= free_h - used_h + 1 <= 5
+     a hit only once every free transfer is used (binary switch), as in FPL
 ```
 
-**Leakage-safe planning.** At gameweek t only the forecast made for t exists. Later weeks reuse each player's per-fixture rate times his club's fixture count that week, which the fixture list shows in advance. No later results, injuries or transfers are used.
+The hurdle is what the planner *charges itself* per extra transfer when planning; the simulation always deducts FPL's real 4 points. Each weekly MILP is solved to a 0.01% gap with a 60-second limit (it finishes in well under a second).
 
-**Settings chosen on the first half, judged on the second.** Horizons H in {1, 3} and transfer hurdles in {4, 6, 8, 12} were tried on gameweeks 1-19 (`reports/season_tuning.csv`); the best there, H = 3 with a hurdle of 8, was then judged on gameweeks 20-38.
+**Leakage-safe planning.** At gameweek t only the forecast made for t exists. Later weeks reuse each player's per-fixture rate times his club's fixture count that week. Fixtures are assumed known H-1 weeks ahead (true for normal weeks; rearranged double gameweeks are announced a few weeks out). No later results, injuries or transfers are used.
+
+**Design, fixed in advance.** Horizons H in {1, 3} and hurdles in {4, 6, 8, 12} are tried on gameweeks 1-19 (`reports/season_tuning.csv`); the best there is judged on gameweeks 20-38. The 5-week-mean forecast gets its own tuning the same way. The value of a free transfer banked at the end of the horizon (1 point) was not tuned.
 
 ![Season](reports/figures/season_cumulative.png)
 
 | Strategy (all under full FPL rules) | GW 20-38 points | Season points | Transfers | Hit points |
 |---|---|---|---|---|
-| **Model, plan 3 weeks ahead, hurdle 8 (selected on GW 1-19)** | **1,086** | **2,090** | 37 | 4 |
-| Model, plan 3 weeks ahead, hurdle = real cost (4) | 961 | 1,891 | 71 | 140 |
-| Model, one week at a time, hurdle 4 | 1,005 | 1,978 | 48 | 52 |
-| Model, keep the GW1 squad (no transfers) | 934 | 1,826 | 0 | 0 |
-| Mean of last 5, plan ahead (selected setting) | 859 | 1,728 | 63 | 104 |
+| Model, selected on GW 1-19: plan 3 weeks ahead, hurdle 8 | 976 | 2,004 | 39 | 8 |
+| Model, one week at a time, hurdle 8 | 1,015 | 1,946 | 38 | 4 |
+| Model, plan 3 weeks ahead, hurdle = real cost (4) | 1,001 | 1,942 | 72 | 140 |
+| Model, one week at a time, hurdle = real cost (4) | 998 | 2,000 | 52 | 60 |
+| Model, keep the GW1 squad (no transfers) | 976 | 1,881 | 0 | 0 |
+| Mean of last 5, its own selected setting (H = 3, hurdle 12) | 1,004 | 1,932 | 42 | 20 |
 
-On gameweeks 20-38 the selected strategy beats the naive forecast inside the same planner by 11.9 points a week (paired bootstrap 95% CI +6.4 to +17.6) and the over-trading planner by 6.6 (CI +1.1 to +12.9). Its edges over the one-week planner (+4.3, CI -1.7 to +10.9) and over holding the opening squad (+8.0, CI -1.9 to +17.8) are not significant over 19 weeks.
+**What the held-out half says: no setting is detectably better.** On gameweeks 20-38 every paired bootstrap interval against the selected strategy includes zero (for example -1.5 points a week vs the 5-week mean in its own best setting, CI -10.3 to +7.5; 0.0 vs holding the opening squad, CI -8.8 to +8.8). The first half's ranking of the eight settings did not carry over: its rank correlation with the second half's is -0.81. One season is a single path (one early transfer changes every later squad), so differences of tens of points between settings are within the noise, and I don't claim a best horizon or hurdle.
 
-**Why charging only the real 4-point cost loses.** Planning ahead with the true hit cost makes 71 transfers and pays 140 points in hits. Every transfer goes to the player whose forecast looks best, and the best-looking forecast in a noisy list is usually too high: the optimiser's curse (Smith & Winkler 2006). Looking three weeks ahead multiplies that bias. A hurdle of 8, twice the real cost, works as a deadband. It is Deming's funnel lesson: adjusting a process for every bit of noise makes results worse.
+**What is robust: the forecast.** Holding the setting fixed and swapping only the forecast (`reports/season_matched.csv`):
 
-**Simplifications:** players are bought and sold at their current price (FPL keeps half of any rise when you sell); no chips; bench order and vice-captain follow the forecast; one season.
+| | Model ahead | Average gap |
+|---|---|---|
+| Season, 8 settings | 8 of 8 | +172 points (+4.5 a week); every model setting (1,940-2,030) beats every 5-week-mean setting (1,691-1,932) |
+| Gameweeks 20-38 only | 6 of 8 | +84 points (+4.4 a week) |
+| Hit points | fewer or equal at all 8 | at the real cost and H = 3: 140 vs 228 |
+
+**Why noisier forecasts pay more in hits.** Every transfer goes to the player whose forecast looks best, and the best-looking forecast in a noisy list tends to be too high (the optimiser's curse, Smith & Winkler 2006). Noisier forecasts make more of these false alarms, so the planner pays for transfers that don't return their cost. A higher hurdle is a deadband against that, in the spirit of Deming's funnel experiment (reacting to differences within the noise adds cost), but in this season the size of the deadband couldn't be pinned down.
+
+**Simplifications:** players are bought and sold at their current price (FPL keeps half of any rise when you sell); no chips; bench order and vice-captain follow the forecast; one season, one path. **Next:** restart the planner from fresh squads at several points in the season (or across seasons) so that settings are compared over many paths rather than one.
 
 ### Sensitivity
 
@@ -283,7 +295,7 @@ An EWMA control chart (lambda = 0.2, 3-sigma limits) of weekly prediction error 
 ## 10. Engineering
 
 - `src/fplopt/`: `data`, `features`, `model`, `optimise`, `baselines`, `backtest`, `monitor`, `reports`, `app` (Streamlit), plus `explain` (signal value), `audit` (xP forensics), `assistant` and `mcp_server` (AI-assistant tools), `planner` and `season` (15-man squad with transfers).
-- `tests/` (pytest, 35 tests). **Planner tests** check every squad keeps the FPL rules, extra transfers are charged exactly once beyond the free ones, a high hurdle stops paid transfers, and automatic substitutions keep a legal formation and hand the armband to the vice-captain. **Property-based tests** (`tests/test_properties.py`, Hypothesis) generate random player pools and check that every solved team obeys every rule, that the MILP beats any random legal team, that more protection never raises the worst case, that the decomposition matches the direct robust MILP, that CQR reaches its coverage, and that the Diebold-Mariano test behaves. Hypothesis already caught a too-weak test of my own and shrank it to a one-line counter-example. **Assistant tests** check the AI tools never return an illegal team, honour locks, match names typed without special letters ("Odegaard" finds Ødegaard) and fail loudly on unknown or ambiguous players. The original unit tests: every team obeys every rule; every baseline obeys every rule; an infeasible budget raises a clear error; Gamma = 0 equals the risk-neutral team; the robust team cuts the worst-case exposure; locks and exclusions hold; the decomposition matches the direct robust MILP; CQR reaches its target coverage; the EWMA flags a persistent shift; one row per player-gameweek; no feature sees the future; rolling means use earlier rows only.
+- `tests/` (pytest, 37 tests). **Planner tests** check every squad keeps the FPL rules, extra transfers are charged exactly once beyond the free ones, a hit is never taken while a free transfer is unused, banked transfers cover several moves, a high hurdle stops paid transfers, the goalkeeper is only replaced by the bench goalkeeper, and automatic substitutions keep a legal formation and hand the armband to the vice-captain. **Property-based tests** (`tests/test_properties.py`, Hypothesis) generate random player pools and check that every solved team obeys every rule, that the MILP beats any random legal team, that more protection never raises the worst case, that the decomposition matches the direct robust MILP, that CQR reaches its coverage, and that the Diebold-Mariano test behaves. Hypothesis already caught a too-weak test of my own and shrank it to a one-line counter-example. **Assistant tests** check the AI tools never return an illegal team, honour locks, match names typed without special letters ("Odegaard" finds Ødegaard) and fail loudly on unknown or ambiguous players. The original unit tests: every team obeys every rule; every baseline obeys every rule; an infeasible budget raises a clear error; Gamma = 0 equals the risk-neutral team; the robust team cuts the worst-case exposure; locks and exclusions hold; the decomposition matches the direct robust MILP; CQR reaches its target coverage; the EWMA flags a persistent shift; one row per player-gameweek; no feature sees the future; rolling means use earlier rows only.
 - **Hosted demo kit:** `scripts/build_hf_space.py` packages the app, its modules and the precomputed reports as a Hugging Face Docker Space (`deploy/hf_space/`); upload instructions are in Quick start.
 - **CI:** GitHub Actions runs the tests on Python 3.11 and 3.12 on every push, plus a CLI smoke test. **Codespaces:** `.devcontainer/` installs everything and starts the demo.
 - **AI-assistant interface (MCP).** `python main.py mcp` serves four tools over the Model Context Protocol: `pick_team`, `explain_player`, `compare_risk`, `backtest_summary`. `.vscode/mcp.json` (GitHub Copilot agent mode) and `.mcp.json` (Claude Code) register it automatically when the repo is opened. The design rule: **the language model only interprets the request and chooses the tool; every number comes from the saved forecasts and an exact MILP**, so the assistant cannot invent a points figure or an illegal team. The same pattern suits a bank: the LLM is the interface, the governed model and optimiser are the engine.
