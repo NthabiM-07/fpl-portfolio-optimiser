@@ -265,6 +265,19 @@ The hurdle is what the planner *charges itself* per extra transfer when planning
 
 **Simplifications:** players are bought and sold at their current price (FPL keeps half of any rise when you sell); no chips; bench order and vice-captain follow the forecast; one season, one path. **Next:** restart the planner from fresh squads at several points in the season (or across seasons) so that settings are compared over many paths rather than one.
 
+### Foundation-model challenger: TabICL (side experiment)
+
+TabICL v2 (Qu et al. 2025, 2026; BSD-3 licence, so usable commercially, unlike TabPFN-2.5's base licence) is a pretrained transformer for tables. It doesn't train on the data; it reads the training rows as context at prediction time. `scripts/tabicl_challenger.py` runs it on the same walk-forward blocks, features and target (total points, one stage) for gameweeks 20-38. On a 2-core CPU it can take only the 4,000 most recent rows as context (the main model trains on about 80,000), so a gradient-boosting model fitted on exactly the same 4,000 rows separates "better model" from "more data". It runs in about 5 minutes after `pip install tabicl` and a 114 MB checkpoint download from Hugging Face (`jingang/TabICL`).
+
+| Forecast, gameweeks 20-38 | Training rows | RMSE | XI points per GW | Two-stage model minus this (95% CI) |
+|---|---|---|---|---|
+| Two-stage model (main) | ~80,000 | 1.86 | 64.4 | |
+| Single GBM | ~80,000 | 1.87 | 56.6 | +7.8 (+1.6 to +14.5) |
+| TabICL v2 (n_estimators = 2) | 4,000 most recent | 1.89 | 50.9 | +13.5 (+3.5 to +22.9) |
+| Single GBM, same rows as TabICL | 4,000 most recent | 1.99 | 47.5 | +16.9 (+6.6 to +27.7) |
+
+**Reading it.** On forecast error, TabICL with 5% of the data comes within 0.03 RMSE of boosting on all of it, and clearly beats boosting on the same rows (1.89 vs 1.99): it is data-efficient, as advertised. On decisions it is no threat to the main model: its teams score 13.5 points a week less, and its edge over boosting on the same rows (+3.4 a week, CI -3.4 to +10.5) is not significant. Two things the main model has that TabICL doesn't here: the two-stage play/score structure and the full history. This repeats the lesson of the signal-value analysis: small RMSE differences say little about who gets ranked at the top. **Next:** TabICL as the stage-two regressor inside the two-stage model, with a larger context on a GPU.
+
 ### Sensitivity
 
 - The budget binds in 21 of 38 gameweeks, but its shadow price is small: a median of 0.09 expected points per extra GBP 1m in the weeks it binds (0.04 over all weeks).
@@ -317,14 +330,14 @@ An EWMA control chart (lambda = 0.2, 3-sigma limits) of weekly prediction error 
 | Ramezani & Dinh, [arXiv:2505.02170](https://arxiv.org/abs/2505.02170) | MILP team selection, box-uncertainty robust variant, GBP 83.5m XI budget | Budget convention; I replace the box set with a calibrated Bertsimas-Sim budget |
 | Adjileye (2024), RisingBALLER, [arXiv:2410.00943](https://huggingface.co/papers/2410.00943) | Transformer "player as token" embeddings for next-match statistics | A route to richer player features; needs event data I don't use |
 | Grady et al. (2026), KellyBench, [arXiv:2604.27865](https://huggingface.co/papers/2604.27865) | Frontier LLMs as agents in a simulated 2023-24 Premier League betting season: all lost money on average (best -8%) | Why the MCP assistant only routes requests: the decision engine stays a tested model and an exact optimiser |
-| Qu et al. (2025), TabICL, [arXiv:2502.05564](https://huggingface.co/papers/2502.05564); checkpoint [jingang/TabICL](https://huggingface.co/jingang/TabICL) (BSD-3; v2 adds regression, arXiv:2602.11139) | Tabular foundation model scaling in-context learning to ~500K rows | The natural foundation-model challenger to gradient boosting; not run here (weights need a download this offline build avoids) |
+| Qu et al. (2025), TabICL, [arXiv:2502.05564](https://huggingface.co/papers/2502.05564); checkpoint [jingang/TabICL](https://huggingface.co/jingang/TabICL) (BSD-3; v2 adds regression, arXiv:2602.11139) | Tabular foundation model scaling in-context learning to ~500K rows | Run as a side experiment in §7: data-efficient on RMSE, but its teams trail the two-stage model |
 | Gibbs & Candès (2021), adaptive conformal inference, [arXiv:2106.00170](https://huggingface.co/papers/2106.00170) | Online conformal intervals with long-run coverage under arbitrary drift | The upgrade for in-season drift such as the DefCon rule change |
 | Zhou & Zhu (2025), [arXiv:2510.07750](https://huggingface.co/papers/2510.07750) | Distribution-free calibration of robustness levels in robust predict-then-optimise | Motivates choosing Gamma from data (§7) rather than by hand |
 | Mandi et al. (2023), decision-focused learning survey, [arXiv:2307.13565](https://huggingface.co/papers/2307.13565) | Training predictors on decision loss | The roadmap step after the signal-value analysis |
 
 ## 13. Roadmap
 
-Chips (wildcard, free hit, bench boost, triple captain) as extra binary decisions in the season planner, and FPL's sell-price rule; component-level scoring to absorb rule changes; an opponent-strength model; chips; same-gameweek transfer and ownership signals once their timing is confirmed; **decision-focused training** (training the forecaster on the SPO+ loss rather than RMSE, which §7 suggests would pay off); a tabular foundation model (TabPFN-2.5) as a challenger, once its 50,000-row limit and non-commercial licence allow.
+Chips (wildcard, free hit, bench boost, triple captain) as extra binary decisions in the season planner, and FPL's sell-price rule; component-level scoring to absorb rule changes; an opponent-strength model; same-gameweek transfer and ownership signals once their timing is confirmed; **decision-focused training** (training the forecaster on the SPO+ loss rather than RMSE, which §7 suggests would pay off); TabICL as the stage-two regressor of the two-stage model with a larger context (the one-stage side experiment in §7 is data-efficient but trails on decisions).
 
 ## Sources
 
@@ -343,6 +356,7 @@ Chips (wildcard, free hit, bench boost, triple captain) as extra binary decision
 - Diebold, F. & Mariano, R. (1995). Comparing predictive accuracy. *Journal of Business & Economic Statistics* 13(3):253-263. Harvey, D., Leybourne, S. & Newbold, P. (1997). Testing the equality of prediction mean squared errors. *International Journal of Forecasting* 13(2):281-291.
 - Breiman, L. (2001). Random forests. *Machine Learning* 45:5-32. Fisher, A., Rudin, C. & Dominici, F. (2019). All models are wrong, but many are useful. *JMLR* 20(177).
 - TabPFN-2.5 (Prior Labs), arXiv:2511.08667: https://alphaxiv.org/abs/2511.08667
+- Qu, J., Holzmüller, D., Varoquaux, G. & Le Morvan, M. (2025). TabICL: a tabular foundation model for in-context learning on large data. ICML 2025, arXiv:2502.05564; TabICLv2 (2026), arXiv:2602.11139; checkpoint https://huggingface.co/jingang/TabICL
 - Model Context Protocol Python SDK: https://github.com/modelcontextprotocol/python-sdk · Hypothesis: https://hypothesis.readthedocs.io
 
 **AI use.** Research, scoping and code drafting were assisted by Claude (Anthropic). All results were re-run locally from the committed data; design decisions, final code and conclusions are my own.
