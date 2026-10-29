@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from .backtest import forecast_table, interval_table, significance_table, strategy_table  # noqa: E402
+from .audit import xp_audit  # noqa: E402
+from .backtest import (cqr_blocks, forecast_dm_table, forecast_table, interval_table,  # noqa: E402
+                       significance_table, strategy_table)
 from .config import FIGURES_DIR, REPORTS_DIR  # noqa: E402
 from .monitor import ewma_chart, weekly_error_by_position  # noqa: E402
 
@@ -50,17 +52,28 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
         "strategies_all_gws": strategy_table(gw, 1),
         "strategies_gw6_38": strategy_table(gw, 6),
         "significance_all_gws": significance_table(gw, 1),
+        "significance_gw6_38": significance_table(gw, 6),
         "forecast_accuracy": forecast_table(pred),
-        "interval_coverage": interval_table(pred).reset_index().rename(columns={"index": "group"}),
+        "forecast_dm": forecast_dm_table(pred),
+        "interval_coverage": interval_table(pred).reset_index().rename(columns={"index": "group", "g": "group"}),
+        "cqr_blocks": cqr_blocks(pred),
     }
+    xa = xp_audit(pred)
+    tabs["xp_audit"], tabs["xp_partial"] = xa["xp_audit"], xa["xp_partial"]
     rsum = (rob.groupby("gamma")["realised"].agg(mean="mean", p10=lambda s: s.quantile(0.1), worst="min", sd="std")
                .reset_index())
     tabs["robust_frontier"] = rsum
+    bp, cc = gw["budget_shadow_pts_per_m"], gw["club_cap_cost_pred"]
     sens = pd.DataFrame({
-        "metric": ["budget shadow price, predicted pts per extra GBP 1m (median)", "gameweeks where budget binds",
-                   "club-cap cost, predicted pts (mean)", "gameweeks where club cap binds", "mean XI cost (GBP m)"],
-        "value": [gw["budget_shadow_pts_per_m"].median(), int((gw["budget_shadow_pts_per_m"] > 1e-6).sum()),
-                  gw["club_cap_cost_pred"].mean(), int((gw["club_cap_cost_pred"] > 1e-6).sum()), gw["model_cost"].mean()],
+        "metric": ["gameweeks where the budget binds", "budget shadow price, predicted pts per extra GBP 1m (median, all GWs)",
+                   "budget shadow price (median, binding GWs only)", "gameweeks where the club cap binds",
+                   "club-cap cost, predicted pts (mean, all GWs)", "club-cap cost (mean, binding GWs only)",
+                   "club-cap cost (worst GW)", "most players from one club with no cap, in the worst GW",
+                   "mean XI cost (GBP m)"],
+        "value": [int((bp > 1e-6).sum()), bp.median(), bp[bp > 1e-6].median(), int((cc > 1e-6).sum()),
+                  cc.mean(), cc[cc > 1e-6].mean(), cc.max(),
+                  int(gw.loc[cc.idxmax(), "nocap_max_per_club"]) if "nocap_max_per_club" in gw else np.nan,
+                  gw["model_cost"].mean()],
     })
     tabs["sensitivity"] = sens
     err = weekly_error_by_position(pred)
@@ -142,5 +155,29 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
     fig.tight_layout(); fig.savefig(FIGURES_DIR / "ewma_monitor.png", dpi=150); plt.close(fig)
 
     summary = {k: v.round(4).to_dict(orient="records") for k, v in tabs.items()}
+    summary["xp_audit_gws"] = tabs["xp_audit"].attrs.get("gws", [])
     (REPORTS_DIR / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     return tabs
+
+
+def write_signal_value(sv: pd.DataFrame) -> None:
+    """Table + figure for `python main.py explain` (grouped permutation importance)."""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    sv.to_csv(REPORTS_DIR / "signal_value.csv", index=False)
+    (REPORTS_DIR / "signal_value.md").write_text(
+        f"Trained before GW{sv.attrs['gws'].split('-')[0]}, evaluated on 2025-26 GW {sv.attrs['gws']}. "
+        f"Base RMSE {sv.attrs['base_rmse']:.3f}, base XI {sv.attrs['base_pts']:.1f} pts/GW.\n\n" + to_markdown(sv) + "\n",
+        encoding="utf-8")
+    t = sv.sort_values("xi_points_lost_per_gw")
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), sharey=True)
+    axes[0].barh(t["family"], t["rmse_increase"], color=COLORS["mean_last5"])
+    axes[0].set_title("Forecast error added (RMSE)", loc="left", fontsize=10, fontweight="bold")
+    axes[1].barh(t["family"], t["xi_points_lost_per_gw"], xerr=t["xi_points_lost_sd"], color=COLORS["model"], ecolor="#3A403C")
+    axes[1].set_title("XI points lost per gameweek", loc="left", fontsize=10, fontweight="bold")
+    for ax in axes:
+        ax.spines[["top", "right"]].set_visible(False); ax.grid(axis="x", color="#E3E6E1"); ax.set_axisbelow(True)
+        ax.axvline(0, color="#3A403C", lw=0.8)
+    fig.suptitle(f"Scrambling each signal family (10 shuffles, GW {sv.attrs['gws']}): cost to the forecast and to the decision",
+                 x=0.02, ha="left", fontweight="bold")
+    fig.tight_layout(); fig.savefig(FIGURES_DIR / "signal_value.png", dpi=150); plt.close(fig)

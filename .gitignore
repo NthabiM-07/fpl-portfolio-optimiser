@@ -5,3 +5,4 @@ data/processed/
 .venv/
 .streamlit/secrets.toml
 .DS_Store
+.hypothesis/

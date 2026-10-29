@@ -3,6 +3,8 @@
     python main.py backtest            # features -> walk-forward model -> MILP picks -> reports/ (~15 min)
     python main.py pick --gw 20        # best XI for a 2025-26 gameweek from the saved predictions
     python main.py app                 # interactive demo (Streamlit)
+    python main.py explain             # which signal families earn points (permutation importance, ~3 min)
+    python main.py mcp                 # serve the optimiser to an AI assistant over MCP (stdio)
     python main.py download            # refresh data/raw from the FPL Historical Dataset
 """
 from __future__ import annotations
@@ -65,6 +67,28 @@ def cmd_app(_: argparse.Namespace) -> None:
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(Path(__file__).parent / "src" / "fplopt" / "app.py")], check=True)
 
 
+def cmd_explain(_: argparse.Namespace) -> None:
+    from fplopt.explain import signal_value
+    from fplopt.reports import write_signal_value
+
+    path = PROCESSED_DIR / "features.pkl"
+    if path.exists():
+        F = pd.read_pickle(path)
+    else:
+        from fplopt.data import build_tables
+        from fplopt.features import build_features
+        F = build_features(*build_tables())
+    sv = signal_value(F, SETTINGS)
+    write_signal_value(sv)
+    print(sv.round(3).to_string(index=False))
+
+
+def cmd_mcp(_: argparse.Namespace) -> None:
+    logging.getLogger().handlers.clear()            # stdout is the MCP channel: keep it clean
+    from fplopt.mcp_server import main as serve
+    serve()
+
+
 def cmd_download(_: argparse.Namespace) -> None:
     from fplopt.data import download
     download()
@@ -81,6 +105,8 @@ def main() -> None:
     pk.add_argument("--gamma", type=float, default=0)
     pk.set_defaults(fn=cmd_pick)
     sub.add_parser("app").set_defaults(fn=cmd_app)
+    sub.add_parser("explain").set_defaults(fn=cmd_explain)
+    sub.add_parser("mcp").set_defaults(fn=cmd_mcp)
     sub.add_parser("download").set_defaults(fn=cmd_download)
     a = p.parse_args()
     a.fn(a)

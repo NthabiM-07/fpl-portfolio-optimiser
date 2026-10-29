@@ -171,6 +171,48 @@
       "gws": 38
     }
   ],
+  "significance_gw6_38": [
+    {
+      "model_vs": "last_week",
+      "mean_diff_pts_per_gw": 11.9394,
+      "ci95_low": 4.2417,
+      "ci95_high": 19.3939,
+      "model_better_gws": 21,
+      "gws": 33
+    },
+    {
+      "model_vs": "mean_last5",
+      "mean_diff_pts_per_gw": 11.4848,
+      "ci95_low": 4.8182,
+      "ci95_high": 18.0008,
+      "model_better_gws": 23,
+      "gws": 33
+    },
+    {
+      "model_vs": "top_price",
+      "mean_diff_pts_per_gw": 25.3333,
+      "ci95_low": 18.1212,
+      "ci95_high": 32.6364,
+      "model_better_gws": 28,
+      "gws": 33
+    },
+    {
+      "model_vs": "random",
+      "mean_diff_pts_per_gw": 44.7606,
+      "ci95_low": 37.412,
+      "ci95_high": 52.2488,
+      "model_better_gws": 32,
+      "gws": 33
+    },
+    {
+      "model_vs": "model_single",
+      "mean_diff_pts_per_gw": 3.3939,
+      "ci95_low": -1.4848,
+      "ci95_high": 8.5462,
+      "model_better_gws": 18,
+      "gws": 33
+    }
+  ],
   "forecast_accuracy": [
     {
       "forecast": "two_stage",
@@ -181,9 +223,10 @@
       "rmse_MID": 1.8712,
       "rmse_FWD": 2.1004,
       "rmse_played": 2.9697,
-      "rmse_0-2 pts": 1.0437,
-      "rmse_3-4 pts": 1.4708,
-      "rmse_5+ pts": 5.5925
+      "rmse_zeros": 0.7464,
+      "rmse_blanks": 1.5591,
+      "rmse_tickers": 1.4708,
+      "rmse_haulers": 5.5925
     },
     {
       "forecast": "single_gbm",
@@ -194,9 +237,10 @@
       "rmse_MID": 1.8729,
       "rmse_FWD": 2.1094,
       "rmse_played": 2.9745,
-      "rmse_0-2 pts": 1.0424,
-      "rmse_3-4 pts": 1.4952,
-      "rmse_5+ pts": 5.6047
+      "rmse_zeros": 0.7495,
+      "rmse_blanks": 1.5522,
+      "rmse_tickers": 1.4952,
+      "rmse_haulers": 5.6047
     },
     {
       "forecast": "mean_last5",
@@ -207,9 +251,10 @@
       "rmse_MID": 2.0728,
       "rmse_FWD": 2.3062,
       "rmse_played": 3.2441,
-      "rmse_0-2 pts": 1.3333,
-      "rmse_3-4 pts": 1.9462,
-      "rmse_5+ pts": 5.7539
+      "rmse_zeros": 0.9234,
+      "rmse_blanks": 2.0271,
+      "rmse_tickers": 1.9462,
+      "rmse_haulers": 5.7539
     },
     {
       "forecast": "last_week",
@@ -220,9 +265,42 @@
       "rmse_MID": 2.491,
       "rmse_FWD": 2.8075,
       "rmse_played": 4.0344,
-      "rmse_0-2 pts": 1.84,
-      "rmse_3-4 pts": 3.2971,
-      "rmse_5+ pts": 6.187
+      "rmse_zeros": 0.9275,
+      "rmse_blanks": 3.1227,
+      "rmse_tickers": 3.2971,
+      "rmse_haulers": 6.187
+    }
+  ],
+  "forecast_dm": [
+    {
+      "model_vs": "single_gbm",
+      "dm_se": 0.9072,
+      "p_se": 0.3702,
+      "model_better_gws_se": 22,
+      "dm_ae": 4.5124,
+      "p_ae": 0.0001,
+      "model_better_gws_ae": 33,
+      "gws": 38
+    },
+    {
+      "model_vs": "mean_last5",
+      "dm_se": 11.3317,
+      "p_se": 0.0,
+      "model_better_gws_se": 38,
+      "dm_ae": 9.5188,
+      "p_ae": 0.0,
+      "model_better_gws_ae": 38,
+      "gws": 38
+    },
+    {
+      "model_vs": "last_week",
+      "dm_se": 33.0153,
+      "p_se": 0.0,
+      "model_better_gws_se": 38,
+      "dm_ae": 17.5836,
+      "p_ae": 0.0,
+      "model_better_gws_ae": 38,
+      "gws": 38
     }
   ],
   "interval_coverage": [
@@ -230,37 +308,152 @@
       "group": "ALL",
       "coverage": 0.9179,
       "raw_coverage": 0.9179,
-      "mean_width": 2.6443
+      "mean_width": 2.6443,
+      "mean_cqr_q": 0.0,
+      "rows": 29338
+    },
+    {
+      "group": "likely starters (P60 >= 0.5)",
+      "coverage": 0.8464,
+      "raw_coverage": 0.8464,
+      "mean_width": 6.7989,
+      "mean_cqr_q": 0.0,
+      "rows": 7717
+    },
+    {
+      "group": "others (P60 < 0.5)",
+      "coverage": 0.9434,
+      "raw_coverage": 0.9434,
+      "mean_width": 1.1615,
+      "mean_cqr_q": 0.0,
+      "rows": 21621
     },
     {
       "group": "DEF",
       "coverage": 0.9077,
       "raw_coverage": 0.9077,
-      "mean_width": 2.8541
+      "mean_width": 2.8541,
+      "mean_cqr_q": 0.0,
+      "rows": 9601
     },
     {
       "group": "FWD",
       "coverage": 0.9249,
       "raw_coverage": 0.9249,
-      "mean_width": 3.1505
+      "mean_width": 3.1505,
+      "mean_cqr_q": 0.0,
+      "rows": 3235
     },
     {
       "group": "GK",
       "coverage": 0.9456,
       "raw_coverage": 0.9456,
-      "mean_width": 1.5597
+      "mean_width": 1.5597,
+      "mean_cqr_q": 0.0,
+      "rows": 3383
     },
     {
       "group": "MID",
       "coverage": 0.9165,
       "raw_coverage": 0.9165,
-      "mean_width": 2.6456
+      "mean_width": 2.6456,
+      "mean_cqr_q": 0.0,
+      "rows": 13119
     },
     {
-      "group": "played only",
+      "group": "played (known only afterwards)",
       "coverage": 0.8076,
       "raw_coverage": 0.8076,
-      "mean_width": 5.5228
+      "mean_width": 5.5228,
+      "mean_cqr_q": 0.0,
+      "rows": 11361
+    }
+  ],
+  "cqr_blocks": [
+    {
+      "block": "GW1-4",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW5-8",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW9-12",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW13-16",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW17-20",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW21-24",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW25-28",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW29-32",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW33-36",
+      "likely_starters": 0.0,
+      "others": 0.0
+    },
+    {
+      "block": "GW37-38",
+      "likely_starters": 0.0,
+      "others": 0.0
+    }
+  ],
+  "xp_audit": [
+    {
+      "forecast": "two-stage model (pre-match)",
+      "corr_points_this_gw": 0.5572,
+      "corr_points_next_gw": 0.5271,
+      "share_of_edge_kept_next_gw": 0.9459,
+      "rmse_points_this_gw": 2.0126
+    },
+    {
+      "forecast": "FPL xP column",
+      "corr_points_this_gw": 0.7337,
+      "corr_points_next_gw": 0.4778,
+      "share_of_edge_kept_next_gw": 0.6512,
+      "rmse_points_this_gw": 1.6476
+    },
+    {
+      "forecast": "mean of last 5 (pre-match)",
+      "corr_points_this_gw": 0.4606,
+      "corr_points_next_gw": 0.4597,
+      "share_of_edge_kept_next_gw": 0.998,
+      "rmse_points_this_gw": 2.2294
+    }
+  ],
+  "xp_partial": [
+    {
+      "xP vs": "goals",
+      "partial_corr_this_gw": 0.3479,
+      "partial_corr_next_gw": 0.021
+    },
+    {
+      "xP vs": "bonus points",
+      "partial_corr_this_gw": 0.4298,
+      "partial_corr_next_gw": 0.0422
     }
   ],
   "robust_frontier": [
@@ -273,63 +466,79 @@
     },
     {
       "gamma": 1,
-      "mean": 58.4737,
+      "mean": 58.3158,
       "p10": 33.7,
       "worst": 18.0,
-      "sd": 19.8736
+      "sd": 19.8196
     },
     {
       "gamma": 2,
-      "mean": 58.4737,
-      "p10": 34.7,
+      "mean": 58.3158,
+      "p10": 33.7,
       "worst": 18.0,
-      "sd": 19.6589
+      "sd": 19.8196
     },
     {
       "gamma": 3,
-      "mean": 57.7105,
-      "p10": 37.1,
+      "mean": 58.0263,
+      "p10": 33.7,
       "worst": 18.0,
-      "sd": 19.0815
+      "sd": 19.5524
     },
     {
       "gamma": 4,
-      "mean": 58.1842,
-      "p10": 37.7,
+      "mean": 58.9211,
+      "p10": 37.1,
       "worst": 18.0,
-      "sd": 19.1154
+      "sd": 19.3438
     },
     {
       "gamma": 6,
-      "mean": 57.6316,
-      "p10": 34.4,
+      "mean": 58.1053,
+      "p10": 36.4,
       "worst": 18.0,
-      "sd": 18.7709
+      "sd": 18.8275
     },
     {
       "gamma": 8,
-      "mean": 56.8158,
+      "mean": 57.1316,
       "p10": 35.5,
       "worst": 18.0,
-      "sd": 18.6052
+      "sd": 19.1962
     }
   ],
   "sensitivity": [
     {
-      "metric": "budget shadow price, predicted pts per extra GBP 1m (median)",
-      "value": 0.0397
-    },
-    {
-      "metric": "gameweeks where budget binds",
+      "metric": "gameweeks where the budget binds",
       "value": 21.0
     },
     {
-      "metric": "club-cap cost, predicted pts (mean)",
+      "metric": "budget shadow price, predicted pts per extra GBP 1m (median, all GWs)",
+      "value": 0.0397
+    },
+    {
+      "metric": "budget shadow price (median, binding GWs only)",
+      "value": 0.092
+    },
+    {
+      "metric": "gameweeks where the club cap binds",
+      "value": 11.0
+    },
+    {
+      "metric": "club-cap cost, predicted pts (mean, all GWs)",
       "value": 0.8524
     },
     {
-      "metric": "gameweeks where club cap binds",
-      "value": 11.0
+      "metric": "club-cap cost (mean, binding GWs only)",
+      "value": 2.9446
+    },
+    {
+      "metric": "club-cap cost (worst GW)",
+      "value": 15.5463
+    },
+    {
+      "metric": "most players from one club with no cap, in the worst GW",
+      "value": 9.0
     },
     {
       "metric": "mean XI cost (GBP m)",
@@ -357,5 +566,18 @@
       "first_signal_gw": NaN,
       "mean_error": -0.0239
     }
+  ],
+  "xp_audit_gws": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    9,
+    24,
+    29,
+    38
   ]
 }

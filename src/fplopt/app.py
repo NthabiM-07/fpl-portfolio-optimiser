@@ -33,6 +33,9 @@ def load():
     rob = pd.read_csv(REPORTS_DIR / "robust_results.csv")
     tabs = {n: pd.read_csv(REPORTS_DIR / f"{n}.csv") for n in
             ["strategies_all_gws", "strategies_gw6_38", "significance_all_gws", "forecast_accuracy", "interval_coverage", "sensitivity"]}
+    for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks"]:          # optional extras
+        f = REPORTS_DIR / f"{n}.csv"
+        tabs[n] = pd.read_csv(f) if f.exists() else None
     return pred, gw, rob, tabs
 
 
@@ -143,13 +146,48 @@ with tab_risk:
     st.plotly_chart(fig, use_container_width=True)
     st.dataframe(fr.round(1), hide_index=True)
     st.caption("Γ = how many players may fall to the bottom of their 80% interval at once. The MILP protects against the worst Γ of them. "
-               "Robust picks are solved on the top 60 candidates per position by expected points.")
+               "Robust picks are solved on the top 60 candidates per position by expected points, on a 32-point θ grid. "
+               "The effect is not monotone in Γ and 38 weeks is a small sample: read it as suggestive, not proven.")
 
 with tab_model:
-    st.markdown("**Forecast accuracy, 2025-26 (out of sample, walk-forward)**")
+    st.markdown("**Forecast accuracy, 2025-26 (out of sample, walk-forward).** Buckets follow OpenFPL (Groos 2025): "
+                "zeros = did not play, blanks ≤ 2, tickers 3-4, haulers ≥ 5.")
     st.dataframe(tabs["forecast_accuracy"].round(3), hide_index=True)
-    st.markdown("**80% prediction interval coverage**")
+    if tabs["forecast_dm"] is not None:
+        st.markdown("**Is the forecast error significantly lower? Diebold-Mariano test across the 38 gameweeks** "
+                    "(losses averaged within each gameweek; Newey-West variance; HLN correction)")
+        fmt_p = lambda v: "<0.0001" if v < 1e-4 else f"{v:.4f}"
+        st.dataframe(tabs["forecast_dm"].assign(p_se=lambda t: t.p_se.map(fmt_p), p_ae=lambda t: t.p_ae.map(fmt_p)).round(2),
+                     hide_index=True)
+        st.caption("Against the single GBM the gain is not significant on squared error (significant on absolute error), yet "
+                   "its *decisions* are clearly worse (Backtest tab). Forecast accuracy and decision quality are different things.")
+    if tabs["signal_value"] is not None:
+        st.markdown("**How much do forecasts and decisions rely on each signal family?** Each family is shuffled within each "
+                    "gameweek (10 times, frozen model); the effect is measured on forecast error and on the realised points of "
+                    "the team the optimiser then picks. Families overlap, so a low score can mean 'replaceable', not 'useless'.")
+        sv = tabs["signal_value"].sort_values("xi_points_lost_per_gw")
+        fig = go.Figure()
+        fig.add_bar(y=sv["family"], x=sv["xi_points_lost_per_gw"], orientation="h", name="XI points lost per GW",
+                    marker_color=GREEN, error_x=dict(type="data", array=sv["xi_points_lost_sd"]))
+        fig.update_layout(title="XI points lost per gameweek when the family is scrambled (GW 20-38, ±1 sd over 10 shuffles)",
+                          xaxis_title="Points per gameweek", height=380, margin=dict(l=10))
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(tabs["signal_value"].round(3), hide_index=True)
+    if tabs["xp_audit"] is not None:
+        with st.expander("Leakage forensics: why FPL's own xP column is excluded"):
+            st.dataframe(tabs["xp_audit"].round(3), hide_index=True)
+            if tabs["xp_partial"] is not None:
+                st.dataframe(tabs["xp_partial"].round(3), hide_index=True)
+            st.caption("On the gameweeks where xP is filled in, it beats every pre-match forecast on this week's points but keeps only "
+                       "about two-thirds of that edge a week later, when it is worse than the model. After removing what the model's "
+                       "pre-match forecast explains, xP still tracks this week's goals and bonus, but not next week's. That strongly "
+                       "suggests post-match information, as the dataset warns.")
+    st.markdown("**80% prediction interval coverage.** Mondrian CQR: likely starters (P(60+ min) ≥ 0.5, known before the "
+                "deadline) and others are calibrated separately, from the last 8 gameweeks of out-of-sample errors.")
     st.dataframe(tabs["interval_coverage"].round(3), hide_index=True)
+    if tabs["cqr_blocks"] is not None:
+        with st.expander("Conformal correction used in each retraining block"):
+            st.dataframe(tabs["cqr_blocks"].round(3), hide_index=True)
     err = weekly_error_by_position(pred)
     pos = st.radio("Position", list(err.columns), horizontal=True, index=list(err.columns).index("DEF") if "DEF" in err else 0)
     e = ewma_chart(err[pos].to_numpy())

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "fpl-optimiser": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["main.py", "mcp"]
+    }
+  }
+}

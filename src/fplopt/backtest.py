@@ -3,6 +3,9 @@
 1. Predict: retrain every `retrain_every` gameweeks on everything before the block (expanding window),
    predict the block, and calibrate the 80% interval with CQR scores from the most recent
    `calib_gws` gameweeks of genuinely out-of-sample predictions (a 2024-25 warm-up seeds the first block).
+   Calibration is Mondrian (group-conditional): likely starters (P(60+ min) >= 0.5, known before the
+   deadline) and everyone else get separate corrections. Pooled, the ~60% of zero-minute rows score
+   exactly 0 and pin the correction at 0, which says nothing about the players the optimiser picks.
 2. Decide: for every test gameweek, pick an XI + captain with the same MILP for every strategy and
    score it on the points those players actually scored.
 """
@@ -25,13 +28,23 @@ ID_COLS = ["season", "GW", "key", "name", "position", "team", "value", "total_po
            "total_points_r1", "total_points_r5", "n_fixtures"]
 
 
-def _conformal_q(records: list[pd.DataFrame], calib_gws: int, alpha: float) -> float:
+STARTER_P = 0.5      # Mondrian group: predicted P(60+ min) at or above this = "likely starter"
+
+
+def is_likely_starter(p_play60) -> np.ndarray:
+    return np.asarray(p_play60, float) >= STARTER_P
+
+
+def _conformal_q(records: list[pd.DataFrame], calib_gws: int, alpha: float) -> dict[bool, float]:
+    """CQR corrections per Mondrian group, from the last `calib_gws` gameweeks of out-of-sample rows."""
     if not records:
-        return 0.0
+        return {True: 0.0, False: 0.0}
     hist = pd.concat(records)
     keys = hist[["season", "GW"]].drop_duplicates().tail(calib_gws)
     recent = hist.merge(keys, on=["season", "GW"])
-    return cqr_correction(recent["total_points"], recent["q_lo_raw"], recent["q_hi_raw"], alpha)
+    g = is_likely_starter(recent["p_play60"])
+    return {k: cqr_correction(recent.loc[g == k, "total_points"], recent.loc[g == k, "q_lo_raw"],
+                              recent.loc[g == k, "q_hi_raw"], alpha) for k in (True, False)}
 
 
 def walk_forward_predict(F: pd.DataFrame, s: Settings = SETTINGS, test_season: str = TEST_SEASON) -> pd.DataFrame:
@@ -59,15 +72,16 @@ def walk_forward_predict(F: pd.DataFrame, s: Settings = SETTINGS, test_season: s
         train = F[(F["season_idx"] < test_idx) | ((F["season"] == test_season) & (F["GW"] < b))]
         two = TwoStageModel(cols, alpha=s.interval_alpha).fit(train)
         one = SingleModel(cols).fit(train)
-        q = _conformal_q(records, s.calib_gws, s.interval_alpha)
+        qd = _conformal_q(records, s.calib_gws, s.interval_alpha)
         pr = pd.concat([block[ID_COLS], two.predict(block)], axis=1)
         pr["mu_single"] = one.predict(block)
-        pr["cqr_q"] = q
-        pr["lo"] = pr["q_lo_raw"] - q
-        pr["hi"] = pr["q_hi_raw"] + q
-        records.append(pr[ID_COLS + ["q_lo_raw", "q_hi_raw"]])
+        pr["cqr_q"] = np.where(is_likely_starter(pr["p_play60"]), qd[True], qd[False])
+        pr["lo"] = pr["q_lo_raw"] - pr["cqr_q"]
+        pr["hi"] = pr["q_hi_raw"] + pr["cqr_q"]
+        records.append(pr[ID_COLS + ["p_play60", "q_lo_raw", "q_hi_raw"]])
         out.append(pr)
-        log.info("block GW%d-%d: train %d rows, q=%.2f, %.1fs", b, b + s.retrain_every - 1, len(train), q, time.time() - t0)
+        log.info("block GW%d-%d: train %d rows, q starters=%.2f others=%.2f, %.1fs", b, b + s.retrain_every - 1,
+                 len(train), qd[True], qd[False], time.time() - t0)
     return pd.concat(out).reset_index(drop=True)
 
 
@@ -93,6 +107,7 @@ def decide(pred: pd.DataFrame, s: Settings = SETTINGS) -> tuple[pd.DataFrame, pd
         rec["budget_shadow_pts_per_m"] = 10 * budget_shadow_price(c, c["mu"].to_numpy(), s.budget_tenths, s.club_cap)
         nocap = solve_team(c, c["mu"].to_numpy(), s.budget_tenths, 11, s.captain)
         rec["club_cap_cost_pred"] = nocap.objective - rec["model_predicted"]
+        rec["nocap_max_per_club"] = int(pd.Series(c["team"].to_numpy()[nocap.idx]).value_counts().max())
         rows.append(rec)
         # Robust sweep on a prefiltered pool (top 60 per position by mu).
         keep = prefilter(c, c["mu"].to_numpy(), 60)
@@ -135,23 +150,73 @@ def significance_table(gw: pd.DataFrame, gw_from: int = 1) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _forecasts(pred: pd.DataFrame) -> dict[str, np.ndarray]:
+    return {"two_stage": pred["mu"].to_numpy(float), "single_gbm": pred["mu_single"].to_numpy(float),
+            "mean_last5": pred["total_points_r5"].fillna(0).to_numpy(float),
+            "last_week": pred["total_points_r1"].fillna(0).to_numpy(float)}
+
+
+def outcome_bucket(pred: pd.DataFrame) -> pd.Series:
+    """OpenFPL's evaluation buckets (Groos 2025): Zeros = did not play, Blanks <= 2, Tickers 3-4, Haulers >= 5."""
+    pts, played = pred["total_points"], pred["minutes"] > 0
+    return pd.Series(np.select([~played, pts <= 2, pts <= 4], ["zeros", "blanks", "tickers"], "haulers"), index=pred.index)
+
+
 def forecast_table(pred: pd.DataFrame) -> pd.DataFrame:
     y = pred["total_points"].to_numpy(float)
-    forecasts = {"two_stage": pred["mu"], "single_gbm": pred["mu_single"],
-                 "mean_last5": pred["total_points_r5"].fillna(0), "last_week": pred["total_points_r1"].fillna(0)}
-    band = pd.cut(pred["total_points"], [-np.inf, 2, 4, np.inf], labels=["0-2 pts", "3-4 pts", "5+ pts"])
+    bucket = outcome_bucket(pred).to_numpy()
     rows = []
-    for name, f in forecasts.items():
-        f = f.to_numpy(float)
+    for name, f in _forecasts(pred).items():
         r = {"forecast": name, "rmse": np.sqrt(np.mean((y - f) ** 2)), "mae": np.mean(np.abs(y - f))}
         for p in ["GK", "DEF", "MID", "FWD"]:
             m = (pred["position"] == p).to_numpy()
             r[f"rmse_{p}"] = np.sqrt(np.mean((y[m] - f[m]) ** 2))
         played = (pred["minutes"] > 0).to_numpy()
         r["rmse_played"] = np.sqrt(np.mean((y[played] - f[played]) ** 2))
-        for bnd in band.cat.categories:
-            m = (band == bnd).to_numpy()
-            r[f"rmse_{bnd}"] = np.sqrt(np.mean((y[m] - f[m]) ** 2))
+        for b in ["zeros", "blanks", "tickers", "haulers"]:
+            m = bucket == b
+            r[f"rmse_{b}"] = np.sqrt(np.mean((y[m] - f[m]) ** 2))
+        rows.append(r)
+    return pd.DataFrame(rows)
+
+
+def diebold_mariano(loss_a: np.ndarray, loss_b: np.ndarray, lag: int = 3) -> tuple[float, float]:
+    """Diebold-Mariano (1995) test of equal expected loss for forecasts A and B. Inputs are per-period
+    losses; a positive statistic means A has the lower loss. The variance is Newey-West (Bartlett
+    kernel) with `lag` lags (default 3 ~ T^(1/3) for T = 38, a guard against serial correlation in
+    weekly losses); the statistic is scaled by sqrt((T-1)/T), the Harvey, Leybourne & Newbold (1997)
+    factor for one-step forecasts, and compared with t(T-1). Returns (statistic, two-sided p)."""
+    from scipy import stats
+
+    d = np.asarray(loss_b, float) - np.asarray(loss_a, float)        # > 0 when A is better
+    T = len(d)
+    dc = d - d.mean()
+    v = dc @ dc / T
+    for k in range(1, min(lag, T - 1) + 1):
+        v += 2 * (1 - k / (lag + 1)) * (dc[k:] @ dc[:-k]) / T
+    if v <= 0:                                                       # identical losses: no evidence either way
+        return 0.0, 1.0
+    dm = d.mean() / np.sqrt(v / T)
+    dm *= np.sqrt((T - 1) / T)                                       # HLN correction, h = 1
+    return float(dm), float(2 * stats.t.sf(abs(dm), df=T - 1))
+
+
+def forecast_dm_table(pred: pd.DataFrame) -> pd.DataFrame:
+    """Is the two-stage model's forecast error significantly lower? Losses are averaged within each
+    gameweek first (players in the same gameweek share shocks), then tested across the 38 gameweeks."""
+    y = pred["total_points"].to_numpy(float)
+    fc = _forecasts(pred)
+    gw = pred["GW"].to_numpy()
+    per_gw = lambda f, kind: pd.Series((y - f) ** 2 if kind == "se" else np.abs(y - f)).groupby(gw).mean().to_numpy()
+    rows = []
+    for base in ["single_gbm", "mean_last5", "last_week"]:
+        r = {"model_vs": base}
+        for kind in ("se", "ae"):
+            a, b = per_gw(fc["two_stage"], kind), per_gw(fc[base], kind)
+            stat, p = diebold_mariano(a, b)
+            r[f"dm_{kind}"], r[f"p_{kind}"] = stat, p
+            r[f"model_better_gws_{kind}"] = int((a < b).sum())
+        r["gws"] = len(np.unique(gw))
         rows.append(r)
     return pd.DataFrame(rows)
 
@@ -160,9 +225,19 @@ def interval_table(pred: pd.DataFrame) -> pd.DataFrame:
     inside = (pred["total_points"] >= pred["lo"]) & (pred["total_points"] <= pred["hi"])
     raw = (pred["total_points"] >= pred["q_lo_raw"]) & (pred["total_points"] <= pred["q_hi_raw"])
     t = pred.assign(inside=inside, raw=raw, width=pred["hi"] - pred["lo"])
-    by = t.groupby("position").agg(coverage=("inside", "mean"), raw_coverage=("raw", "mean"), mean_width=("width", "mean"))
-    allr = pd.DataFrame({"coverage": [inside.mean()], "raw_coverage": [raw.mean()], "mean_width": [t["width"].mean()]}, index=["ALL"])
-    played = t[t["minutes"] > 0]
-    pl = pd.DataFrame({"coverage": [played["inside"].mean()], "raw_coverage": [played["raw"].mean()],
-                       "mean_width": [played["width"].mean()]}, index=["played only"])
-    return pd.concat([allr, by, pl])
+    agg = dict(coverage=("inside", "mean"), raw_coverage=("raw", "mean"), mean_width=("width", "mean"),
+               mean_cqr_q=("cqr_q", "mean"), rows=("inside", "size"))
+    parts = [t.assign(g="ALL").groupby("g").agg(**agg),
+             t.assign(g=np.where(is_likely_starter(t["p_play60"]), "likely starters (P60 >= 0.5)", "others (P60 < 0.5)")).groupby("g").agg(**agg),
+             t.groupby("position").agg(**agg),
+             t[t["minutes"] > 0].assign(g="played (known only afterwards)").groupby("g").agg(**agg)]
+    return pd.concat(parts)
+
+
+def cqr_blocks(pred: pd.DataFrame, retrain_every: int = SETTINGS.retrain_every) -> pd.DataFrame:
+    """The conformal correction used in each retraining block, per Mondrian group."""
+    t = pred.assign(block=(pred["GW"] - 1) // retrain_every * retrain_every + 1,
+                    group=np.where(is_likely_starter(pred["p_play60"]), "likely_starters", "others"))
+    out = t.groupby(["block", "group"])["cqr_q"].first().unstack()
+    out.index = [f"GW{b}-{min(b + retrain_every - 1, int(pred['GW'].max()))}" for b in out.index]
+    return out.reset_index().rename(columns={"index": "block"})

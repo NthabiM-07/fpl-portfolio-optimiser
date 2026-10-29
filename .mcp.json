@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "fpl-optimiser": {
+      "command": "python",
+      "args": ["main.py", "mcp"]
+    }
+  }
+}

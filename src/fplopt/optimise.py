@@ -16,9 +16,12 @@ Bertsimas & Sim (2003, Math. Programming 98:49-71) show this equals
     max_theta  [ -Gamma * theta + nominal problem with scores mu_i - max(d_i - theta, 0) ],
 
 with theta ranging over {0, d_1, ..., d_n}; Lee & Kwon (2014) show about half of those values suffice.
-So the robust team is found by solving a series of fast nominal MILPs (`thetas="exact"`), or a
-quantile grid of theta values (`thetas=<int>`) for speed. `solve_team_robust_milp` is the direct
-single-MILP formulation, kept to test that the two agree.
+So the robust team is found by solving a series of nominal MILPs (`thetas="exact"`), or, for speed,
+a quantile grid of theta values (`thetas=<int>`). On the full ~790-player pool the exact set is no
+faster than the direct MILP (both take tens of seconds at Gamma = 4); the 16-point grid takes about
+1.5 s. Every candidate team is scored by its true worst case, so a grid answer is always a valid
+robust team, at worst slightly conservative. `solve_team_robust_milp` is the direct single-MILP
+formulation, kept to test that the exact decomposition agrees with it.
 """
 from __future__ import annotations
 
@@ -30,6 +33,8 @@ from scipy import sparse
 from scipy.optimize import Bounds, LinearConstraint, linprog, milp
 
 from .config import XI_LIMITS
+
+MILP_OPTIONS = {"mip_rel_gap": 0.0}   # solve to proven optimality, not HiGHS's default 0.01% gap
 
 
 class InfeasibleTeamError(ValueError):
@@ -92,7 +97,7 @@ def _solve_nominal(cands, x_score, c_score, budget_tenths, club_cap, captain, lo
         lb[i] = 1
     for i in (exclude or []):
         ub[i] = 0
-    res = milp(c, constraints=LinearConstraint(A, lo, hi), integrality=np.ones(N), bounds=Bounds(lb, ub))
+    res = milp(c, constraints=LinearConstraint(A, lo, hi), integrality=np.ones(N), bounds=Bounds(lb, ub), options=MILP_OPTIONS)
     if res.status != 0 or res.x is None:
         raise InfeasibleTeamError(f"no feasible team: {res.message}")
     x = np.flatnonzero(res.x[:n] > 0.5)
@@ -130,13 +135,15 @@ def solve_team(cands: pd.DataFrame, mu: np.ndarray, budget_tenths: int = 835, cl
     if gamma <= 0 or d is None:
         return _solve_nominal(cands, mu, mu, budget_tenths, club_cap, captain, lock, exclude)
     d = np.nan_to_num(np.asarray(d, float)).clip(min=0)
+    # Each theta gives a candidate team; keep the one with the best TRUE worst case. With the exact
+    # (Lee-Kwon) theta set this is the robust optimum; on a grid it is a feasible, slightly
+    # conservative approximation that can only improve on ranking teams by the theta-bound.
     best: Team | None = None
     for th in _theta_values(d, gamma, thetas):
         t = _solve_nominal(cands, mu - np.maximum(d - th, 0), mu, budget_tenths, club_cap, captain, lock, exclude)
-        val = t.objective - gamma * th
+        val = robust_value(mu, d, t, gamma)
         if best is None or val > best.objective + 1e-9:
             best = Team(t.idx, t.captain, val, th)
-    best.objective = robust_value(mu, d, best, gamma)
     return best
 
 
@@ -156,7 +163,7 @@ def solve_team_robust_milp(cands, mu, d, gamma, budget_tenths=835, club_cap=3, c
     A = sparse.csr_matrix((vals, (rows, cols)), shape=(r, N))
     integ = np.r_[np.ones(nxc), np.zeros(1 + n)]
     res = milp(c, constraints=LinearConstraint(A, lo, hi), integrality=integ,
-               bounds=Bounds(0, np.r_[np.ones(nxc), np.full(1 + n, np.inf)]))
+               bounds=Bounds(0, np.r_[np.ones(nxc), np.full(1 + n, np.inf)]), options=MILP_OPTIONS)
     if res.status != 0:
         raise InfeasibleTeamError(res.message)
     x = np.flatnonzero(res.x[:n] > 0.5)

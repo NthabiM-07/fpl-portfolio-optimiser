@@ -6,22 +6,24 @@
 
 ---
 
-## STATUS: built and backtested (29 Oct 2026, 06:00 SAST)
+## STATUS: built, backtested and extended (29 Oct 2026, 08:00 SAST)
 
 This repository implements the spec below. Where the build differs from the spec, **the build wins** and the differences are listed here.
 
-**Results (2025-26, all 38 GWs, walk-forward, captain doubled, GBP 83.5m XI):** two-stage model 58.5 pts/GW; last week 46.6; mean of last 5 46.4; most expensive 33.7; random legal 13.9; single-GBM ablation 53.1. Model vs last week: +11.9 pts/GW (95% CI +5.2 to +18.3), +25.5%. Interval coverage: 80.8% on players who played (target 80%). Robust Γ=4: 10th-percentile week +4.0, mean −0.3. EWMA flags DEF from GW3 (DefCon drift). Full tables: `reports/results.md`.
+**Results (2025-26, all 38 GWs, walk-forward, captain doubled, GBP 83.5m XI):** two-stage model 58.5 pts/GW; last week 46.6; mean of last 5 46.4; most expensive 33.7; random legal 13.9; single-GBM ablation 53.1. Model vs last week: +11.9 pts/GW (95% CI +5.2 to +18.3), +25.5%; GW 6-38 CI +4.2 to +19.4 (ablation not significant on GW 6-38). Forecast error below both naive baselines in 38/38 GWs (Diebold-Mariano p < 0.0001); vs single GBM not significant on squared error (p = 0.37), significant on absolute error. Intervals: Mondrian CQR by P(60+) >= 0.5; correction 0 in every block (integer ties at the lower bound); coverage 84.6% likely starters, 80.8% players who played. Robust: Γ=1-3 no change; Γ=4 10th-percentile week +3.4 (mean +0.4); worst week 18 at every Γ; suggestive only. Signal value (10 shuffles, GW 20-38): playing time 12.3 XI pts/GW (+0.45 RMSE), market 8.4 (+0.05), fixture 7.0 (+0.04). xP audit: keeps 65% of its edge next week (model 95%); partial corr with same-week goals 0.35 / bonus 0.43 vs next-week 0.02 / 0.04 → strongly suggests post-match info; excluded as feature and benchmark. EWMA flags DEF from GW3 (DefCon drift). Full tables: `reports/results.md`, `reports/signal_value.md`.
+
+**Rule for agents editing `assistant.py` / `mcp_server.py`:** the LLM never computes points; tools must return numbers from the saved forecasts and `solve_team` only.
 
 **Differences from the original spec:**
 - Seasons: 2022-23 to 2025-26 (four, not three); a cross-season player key carries form over the summer, so GW1 has history.
 - Validation: expanding-window walk-forward, retraining every 4 GWs across 2025-26 (not one fixed training split). CQR scores come from the most recent 8 GWs of out-of-sample predictions, seeded by a 2024-25 warm-up.
-- Robust optimisation: solved by the Bertsimas & Sim (2003) decomposition into nominal MILPs (Lee & Kwon 2014 index set, or a theta grid); `solve_team_robust_milp` is kept only to test equivalence. The backtest sweep uses the top 60 per position and a 32-point grid.
-- Intervals: a direct quantile GBM at 10/90 plus CQR (not a mixture of conditional quantiles).
+- Robust optimisation: solved by the Bertsimas & Sim (2003) decomposition into nominal MILPs (Lee & Kwon 2014 index set, or a theta grid; each candidate team scored by its true worst case); `solve_team_robust_milp` is kept only to test equivalence. All MILPs use `mip_rel_gap = 0`. The backtest sweep uses the top 60 per position and a 32-point grid; the app and assistant use a 16-point grid (~1.5 s on the full pool).
+- Intervals: a direct quantile GBM at 10/90 plus Mondrian CQR by predicted playing status (not a mixture of conditional quantiles).
 - Primary metric view: all 38 GWs; secondary: GW 6-38 (both pre-declared).
 
-**Commands:** `python main.py app` (demo) · `pytest -q` (12 tests) · `python main.py backtest` (~10 min full rebuild) · `python main.py pick --gw 20 --gamma 4`.
+**Commands:** `python main.py app` (demo) · `pytest -q` (29 tests incl. Hypothesis property tests) · `python main.py backtest` (~10 min full rebuild) · `python main.py explain` (signal value, ~3 min) · `python main.py pick --gw 20 --gamma 4` · `python main.py mcp` (MCP tool server; registered in `.vscode/mcp.json` and `.mcp.json`).
 
-**Code map:** `src/fplopt/{config,data,features,model,optimise,baselines,backtest,monitor,reports,app}.py`, `tests/`, `reports/` (generated outputs and figures, committed so the demo runs offline).
+**Code map:** `src/fplopt/{config,data,features,model,optimise,baselines,backtest,monitor,reports,app,explain,audit,assistant,mcp_server}.py`, `tests/`, `.github/workflows/tests.yml` (CI), `.devcontainer/` (Codespaces), `reports/` (generated outputs and figures, committed so the demo runs offline).
 
 ---
 
@@ -384,7 +386,7 @@ Smoke-test output on 2025-26 data: 29,338 rows after aggregation, zero-minute sh
 
 ## 10. Part A (creative pitch): context, in case an agent edits the deck or notes
 
-**Concept: Mycelium, credit that grows through stokvel networks** (biomimicry plus Blue Ocean plus Lean). The deck has 5 slides + 4 appendix slides with speaker notes (`Mycelium_PartA_pitch_v2.pptx`).
+**Concept: Mycelium, credit that grows through stokvel networks** (biomimicry plus Blue Ocean plus Lean). The deck has 5 slides + 5 appendix slides with speaker notes (`Mycelium_PartA_pitch_v3.pptx`). v3 adds a Monte Carlo stress test (`stress_test.py`: two-factor Gaussian copula, 20,000 cycles; with 25 groups a 1-in-1,000 cycle loses 13% of the book with a loan per member vs 21% with one loan per group, same EL ≈ 4.2%; diversified from 25–50 groups; whole-group default = 0.3% of a 500-group book; all parameters are stated assumptions). A clickable 4-screen member-app prototype exists as a Claude Design canvas.
 
 - **Inspiration:** mycorrhizal fungi trade phosphorus for plant carbon in a "biological market"; both sides reward fair partners and sanction hoarders (**Kiers et al. 2011, *Science* 333:880**). Do NOT use the "mother tree" claim, which is disputed (**Karst, Jones & Hoeksema 2023**; Simard rebutted it in 2025).
 - **Problem:** ~11m stokvel members in ~800,000 groups save >R50bn a year (NASASA estimates, unaudited). Stokvel loans cost **25–35% a month** (Ngcobo & Chisasa 2018, survey of 386 members). The NCA caps short-term credit at **5% a month for a first loan and 3% after**.
