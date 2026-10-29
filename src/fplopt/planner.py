@@ -87,9 +87,14 @@ def plan_transfers(mu: np.ndarray, price: np.ndarray, position: np.ndarray, club
     rows, cols, vals, lo, hi = [], [], [], [], []
     r = 0
 
-    def add(idx, coef, l, u):
+    def add(idx, coef, lower, upper):
         nonlocal r
-        rows.extend([r] * len(idx)); cols.extend(idx); vals.extend(coef); lo.append(l); hi.append(u); r += 1
+        rows.extend([r] * len(idx))
+        cols.extend(idx)
+        vals.extend(coef)
+        lo.append(lower)
+        hi.append(upper)
+        r += 1
 
     ix = np.arange(n)
     for h in range(H):
@@ -151,7 +156,9 @@ def plan_transfers(mu: np.ndarray, price: np.ndarray, position: np.ndarray, club
     if res.status != 0:
         log.warning("planner stopped early (%s); using the best plan found", res.message)
     x = res.x
-    get = lambda kind: np.flatnonzero(x[kind * n: kind * n + n] > 0.5)
+    def get(kind: int) -> np.ndarray:
+        return np.flatnonzero(x[kind * n: kind * n + n] > 0.5)
+
     return Plan(squad=get(S), xi=get(X), captain=int(get(C)[0]), buys=get(B), sells=get(D),
                 paid=int(round(x[PAID])), objective=float(-res.fun), status=res.message)
 
@@ -168,7 +175,8 @@ def autosub_points(squad: list, xi: list, captain, vice, pts: dict, mins: dict, 
     for k in [k for k in xi if mins.get(k, 0) <= 0]:
         if pos[k] == "GK":
             if bench_gk and mins.get(bench_gk[0], 0) > 0:
-                xi[xi.index(k)] = bench_gk.pop(0); subs += 1
+                xi[xi.index(k)] = bench_gk.pop(0)
+                subs += 1
             continue
         for b in bench_out:
             if mins.get(b, 0) <= 0:
@@ -176,7 +184,9 @@ def autosub_points(squad: list, xi: list, captain, vice, pts: dict, mins: dict, 
             trial = [b if q == k else q for q in xi]
             counts = pd.Series([pos[q] for q in trial]).value_counts()
             if all(lo_ <= counts.get(p, 0) <= hi_ for p, (lo_, hi_) in XI_LIMITS.items()):
-                xi = trial; bench_out.remove(b); subs += 1
+                xi = trial
+                bench_out.remove(b)
+                subs += 1
                 break
     total = float(sum(pts.get(k, 0) for k in xi))
     cap = captain if mins.get(captain, 0) > 0 else (vice if vice in xi and mins.get(vice, 0) > 0 else None)
@@ -195,7 +205,7 @@ def simulate_season(pred: pd.DataFrame, score_col: str = "mu", cfg: PlanConfig |
     team_fx = pred.groupby(["GW", "team"])["n_fixtures"].max()       # club fixture counts (known in advance)
     last_price: dict = {}
     last_rate: dict = {}
-    pos_of: dict = dict(zip(pred["key"], pred["position"]))
+    pos_of: dict = dict(zip(pred["key"], pred["position"], strict=True))
     club_of: dict = {}
     squad: list = []
     bank = float(cfg.budget_tenths)

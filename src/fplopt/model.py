@@ -41,7 +41,7 @@ class TwoStageModel:
     q_lo: HistGradientBoostingRegressor | None = field(default=None, repr=False)
     q_hi: HistGradientBoostingRegressor | None = field(default=None, repr=False)
 
-    def fit(self, df: pd.DataFrame) -> "TwoStageModel":
+    def fit(self, df: pd.DataFrame) -> TwoStageModel:
         self.features = _usable(df, self.features)
         X = df[self.features]
         cat = _cat_mask(self.features)
@@ -82,7 +82,7 @@ class SingleModel:
     features: list[str]
     reg: HistGradientBoostingRegressor | None = field(default=None, repr=False)
 
-    def fit(self, df: pd.DataFrame) -> "SingleModel":
+    def fit(self, df: pd.DataFrame) -> SingleModel:
         self.features = _usable(df, self.features)
         self.reg = HistGradientBoostingRegressor(categorical_features=_cat_mask(self.features), **GB_PARAMS)
         self.reg.fit(df[self.features], df["total_points"])

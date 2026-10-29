@@ -1,10 +1,10 @@
 """Entry point.
 
-    python main.py backtest            # features -> walk-forward model -> MILP picks -> reports/ (~15 min)
+    python main.py backtest            # features -> walk-forward model -> MILP picks -> reports/ (~10 min)
     python main.py pick --gw 20        # best XI for a 2025-26 gameweek from the saved predictions
     python main.py app                 # interactive demo (Streamlit)
     python main.py explain             # which signal families earn points (permutation importance, ~3 min)
-    python main.py season              # full FPL rules: 15-man squad, transfers and hits over the season (~4 min)
+    python main.py season              # full FPL rules: 15-man squad, transfers and hits over the season (~3 min)
     python main.py mcp                 # serve the optimiser to an AI assistant over MCP (stdio)
     python main.py download            # refresh data/raw from the FPL Historical Dataset
 """
@@ -105,6 +105,9 @@ def cmd_download(_: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):  # player names such as Ødegaard print on any console (e.g. Windows cp1252)
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     p = argparse.ArgumentParser(description="FPL team selection as constrained portfolio optimisation")
     sub = p.add_subparsers(dest="cmd", required=True)

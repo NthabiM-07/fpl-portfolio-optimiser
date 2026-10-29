@@ -134,8 +134,10 @@ def decide(pred: pd.DataFrame, s: Settings = SETTINGS) -> tuple[pd.DataFrame, pd
         d = (cc["mu"] - cc["lo"]).clip(lower=0).to_numpy()
         for g in s.gammas:
             team = solve_team(cc, cc["mu"].to_numpy(), s.budget_tenths, s.club_cap, s.captain, d=d, gamma=g, thetas=32)
+            mu_cc = cc["mu"].to_numpy()
+            captain_mu = mu_cc[team.captain] if team.captain is not None else 0.0
             rob.append({"GW": gw, "gamma": g, "realised": realised_points(cc, team),
-                        "predicted_mu": float(cc["mu"].to_numpy()[team.idx].sum() + (cc["mu"].to_numpy()[team.captain] if team.captain is not None else 0)),
+                        "predicted_mu": float(mu_cc[team.idx].sum() + captain_mu),
                         "downside_sum": float(d[team.idx].sum())})
         # Calibrated Gamma: chosen from past weeks only, then scored on this week.
         g_cal = calibrated_gamma(shortfalls, s.gamma_quantile, s.gamma_min_history)
@@ -258,7 +260,10 @@ def forecast_dm_table(pred: pd.DataFrame) -> pd.DataFrame:
     y = pred["total_points"].to_numpy(float)
     fc = _forecasts(pred)
     gw = pred["GW"].to_numpy()
-    per_gw = lambda f, kind: pd.Series((y - f) ** 2 if kind == "se" else np.abs(y - f)).groupby(gw).mean().to_numpy()
+    def per_gw(f: np.ndarray, kind: str) -> np.ndarray:
+        loss = (y - f) ** 2 if kind == "se" else np.abs(y - f)
+        return pd.Series(loss).groupby(gw).mean().to_numpy()
+
     rows = []
     for base in ["single_gbm", "mean_last5", "last_week"]:
         r = {"model_vs": base}
