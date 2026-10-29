@@ -103,17 +103,21 @@ def write(tabs: dict[str, pd.DataFrame]) -> None:
     colors = ["#1E4D3A", "#6E9B4E", "#B5473A", "#4C72B0", "#8C6D31", "#9AA19D"]
     fig, ax = plt.subplots(figsize=(9, 4.8))
     names = [c for c in gw.columns if c != "GW"]
-    for col, color in zip(names, colors):
+    for col, color in zip(names, colors, strict=False):
         ax.plot(gw["GW"], gw[col].cumsum(), color=color, lw=2.4 if col == "Model, selected setting" else 1.5,
                 label=f"{col} ({gw[col].sum():.0f})")
     ax.axvline(SPLIT_GW - 0.5, color="#3A403C", ls=":", lw=1)
     ax.text(SPLIT_GW - 0.3, ax.get_ylim()[1] * 0.04, "settings chosen on GW 1-19 | judged on GW 20-38", fontsize=8, color="#3A403C")
     ax.set_title("Full FPL rules, 2025-26: 15-man squad, GBP 100m, 1 free transfer a week, -4 per extra",
                  loc="left", fontsize=11, fontweight="bold")
-    ax.set_xlabel("Gameweek"); ax.set_ylabel("Cumulative points (after hits)")
-    ax.spines[["top", "right"]].set_visible(False); ax.grid(axis="y", color="#E3E6E1")
+    ax.set_xlabel("Gameweek")
+    ax.set_ylabel("Cumulative points (after hits)")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="y", color="#E3E6E1")
     ax.legend(frameon=False, fontsize=8, loc="upper left")
-    fig.tight_layout(); fig.savefig(FIGURES_DIR / "season_cumulative.png", dpi=150); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "season_cumulative.png", dpi=150)
+    plt.close(fig)
     log.info("season reports written; selected H=%s hurdle=%s", tabs["season_summary"].attrs.get("horizon"),
              tabs["season_summary"].attrs.get("hurdle"))
 

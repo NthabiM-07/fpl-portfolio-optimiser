@@ -56,7 +56,7 @@ def test_more_protection_never_raises_the_worst_case(seed):
     c = _pool(seed, 60, 12)
     mu, d = c["mu"].to_numpy(), c["d"].to_numpy()
     vals = [solve_team(c, mu, 900, 3, True, d=d, gamma=g).objective for g in (0, 1, 2, 4)]
-    assert all(a >= b - 1e-6 for a, b in zip(vals, vals[1:]))
+    assert all(a >= b - 1e-6 for a, b in zip(vals[:-1], vals[1:], strict=True))
 
 
 @settings(max_examples=10, deadline=None, derandomize=True)

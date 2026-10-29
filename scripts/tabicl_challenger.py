@@ -47,9 +47,18 @@ def main() -> None:
     ap.add_argument("--max-minutes", type=float, default=40.0, help="stop after this many minutes (time box)")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    from tabicl import TabICLRegressor
+    try:
+        from tabicl import TabICLRegressor
+    except ImportError as e:  # optional dependency, not in requirements.txt
+        raise SystemExit("TabICL is optional: pip install tabicl (it pulls PyTorch), then re-run.") from e
 
-    F = pd.read_pickle(ROOT / "data" / "processed" / "features.pkl")
+    cache = ROOT / "data" / "processed" / "features.pkl"
+    if cache.exists():
+        F = pd.read_pickle(cache)
+    else:  # fresh clone: rebuild the as-of features from the committed raw data (a few minutes)
+        from fplopt.data import build_tables
+        from fplopt.features import build_features
+        F = build_features(*build_tables())
     pred = pd.read_csv(REPORTS_DIR / "predictions_2025-26.csv.gz")
     cols = feature_columns(F)
     test_idx = int(F.loc[F["season"] == TEST_SEASON, "season_idx"].iloc[0])

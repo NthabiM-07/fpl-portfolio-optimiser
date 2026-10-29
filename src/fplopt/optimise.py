@@ -64,9 +64,14 @@ def _constraints(cands: pd.DataFrame, n_extra: int, captain: bool, budget_tenths
     rows, cols, vals, lo, hi = [], [], [], [], []
     r = 0
 
-    def add(cidx, v, l, h):
+    def add(cidx, v, lower, upper):
         nonlocal r
-        rows.extend([r] * len(cidx)); cols.extend(cidx); vals.extend(v); lo.append(l); hi.append(h); r += 1
+        rows.extend([r] * len(cidx))
+        cols.extend(cidx)
+        vals.extend(v)
+        lo.append(lower)
+        hi.append(upper)
+        r += 1
 
     ix = np.arange(n)
     add(ix, np.ones(n), 11, 11)
@@ -150,16 +155,24 @@ def solve_team(cands: pd.DataFrame, mu: np.ndarray, budget_tenths: int = 835, cl
 def solve_team_robust_milp(cands, mu, d, gamma, budget_tenths=835, club_cap=3, captain=True) -> Team:
     """Direct one-MILP robust counterpart (slow for large gamma); used to validate `solve_team`."""
     n = len(cands)
-    mu = np.asarray(mu, float); d = np.asarray(d, float).clip(min=0)
+    mu = np.asarray(mu, float)
+    d = np.asarray(d, float).clip(min=0)
     rows, cols, vals, lo, hi, r, N = _constraints(cands, 1 + n, captain, budget_tenths, club_cap)
     nxc = n * (2 if captain else 1)
     z = nxc
     for i in range(n):                                   # z + q_i - d_i x_i >= 0
-        rows.extend([r] * 3); cols.extend([z, z + 1 + i, i]); vals.extend([1.0, 1.0, -d[i]]); lo.append(0); hi.append(np.inf); r += 1
-    c = np.zeros(N); c[:n] = -mu
+        rows.extend([r] * 3)
+        cols.extend([z, z + 1 + i, i])
+        vals.extend([1.0, 1.0, -d[i]])
+        lo.append(0)
+        hi.append(np.inf)
+        r += 1
+    c = np.zeros(N)
+    c[:n] = -mu
     if captain:
         c[n:2 * n] = -mu
-    c[z] = gamma; c[z + 1:] = 1.0
+    c[z] = gamma
+    c[z + 1:] = 1.0
     A = sparse.csr_matrix((vals, (rows, cols)), shape=(r, N))
     integ = np.r_[np.ones(nxc), np.zeros(1 + n)]
     res = milp(c, constraints=LinearConstraint(A, lo, hi), integrality=integ,
@@ -205,9 +218,11 @@ def budget_shadow_price(cands: pd.DataFrame, mu: np.ndarray, budget_tenths: int 
     pos = cands["position"].to_numpy()
     for p, (lo, hi) in XI_LIMITS.items():
         m = (pos == p).astype(float)
-        A += [m, -m]; b += [hi, -lo]
+        A += [m, -m]
+        b += [hi, -lo]
     for t in pd.unique(cands["team"]):
-        A.append((cands["team"].to_numpy() == t).astype(float)); b.append(club_cap)
+        A.append((cands["team"].to_numpy() == t).astype(float))
+        b.append(club_cap)
     res = linprog(-np.nan_to_num(np.asarray(mu, float)), A_ub=np.array(A), b_ub=b,
                   A_eq=np.ones((1, n)), b_eq=[11], bounds=(0, 1), method="highs")
     return float(-res.ineqlin.marginals[0]) if res.status == 0 else float("nan")

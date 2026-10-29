@@ -13,25 +13,49 @@
 - **Leakage forensics.** I tested FPL's own `xP` column instead of trusting it. Its edge fades a week later and tracks same-week goals and bonus, which strongly suggests post-match information (§7).
 - **Forecast significance.** The model's forecast error is lower than both naive baselines in every one of the 38 gameweeks (Diebold-Mariano, p < 0.0001).
 - **An AI-assistant interface.** An MCP server lets Claude or GitHub Copilot call the optimiser ("pick my GW 20 team under GBP 80m without Haaland"). The LLM routes the request; every number comes from the MILP (§10).
-- **Engineering.** 37 tests including Hypothesis property-based tests, GitHub Actions CI, and a dev container that opens the demo in Codespaces.
+- **Engineering.** 37 tests including Hypothesis property-based tests, CI on macOS, Windows and Linux, pinned versions for exact reproduction, linting, and a dev container that opens the demo in Codespaces.
 
 ---
 
 ## Quick start
 
+Needs Python 3.11, 3.12 or 3.13; no GPU and no internet after installing (the four seasons of data are committed under `data/raw/`). CI runs the tests on **macOS, Windows and Linux** on every push.
+
+**macOS or Linux**
+
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python main.py app            # interactive demo, runs offline from reports/ (about 10 seconds)
-pytest -q                     # 37 tests (unit + property-based), about 1.5 minutes
-python main.py backtest       # optional: rebuild everything from raw data (about 10 minutes on a laptop)
-python main.py explain        # optional: decision-focused signal importance (about 3 minutes)
-python main.py season         # optional: full FPL rules over the season, 15-man squad and transfers (about 3 minutes)
-python main.py pick --gw 20 --gamma 4     # print a robust XI for one gameweek
-python main.py mcp            # serve the optimiser to an AI assistant (see §10)
+git clone https://github.com/NthabiM-07/fpl-portfolio-optimiser.git && cd fpl-portfolio-optimiser
+make setup                    # creates .venv and installs the exact tested versions (requirements-lock.txt)
+make test                     # 37 tests (unit + property-based), about 1.5 minutes
+make app                      # interactive demo in the browser, runs offline from reports/
 ```
 
-Python 3.10+; no GPU, no internet needed (the four season files are committed under `data/raw/`). **No local setup?** On GitHub, choose *Code → Codespaces → Create codespace*: the dev container installs everything and opens the demo. **Hosted demo:** `python scripts/build_hf_space.py` assembles a Hugging Face Docker Space in `dist/hf_space/` (Streamlit is no longer a built-in Spaces SDK, so the kit uses the Docker template); create an empty private Docker Space on huggingface.co and run `hf upload <user>/<space-name> dist/hf_space . --repo-type space`.
+Without `make`: `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements-lock.txt`, then the `python main.py ...` commands below.
+
+**Windows (PowerShell)**
+
+```powershell
+git clone https://github.com/NthabiM-07/fpl-portfolio-optimiser.git; cd fpl-portfolio-optimiser
+py -3.12 -m venv .venv; .venv\Scripts\Activate.ps1
+pip install -r requirements-lock.txt
+python -m pytest -q
+python main.py app
+```
+
+**Every command**
+
+```bash
+python main.py app                        # interactive demo (Streamlit), offline
+python main.py pick --gw 20 --gamma 4     # print a robust XI for one gameweek
+python main.py backtest                   # rebuild every result from the raw data (about 10 minutes on a laptop)
+python main.py explain                    # decision-focused signal importance (about 3 minutes)
+python main.py season                     # full FPL rules: 15-man squad, transfers and hits (about 3 minutes)
+python main.py mcp                        # serve the optimiser to an AI assistant (see §10)
+```
+
+**Reproducibility.** Every random step is seeded and every split is by time. `requirements-lock.txt` pins the versions the committed results were produced with; `requirements.txt` gives the minimum versions. Re-running `backtest` reproduces the committed numbers on the locked versions; on other versions or chips (for example Apple silicon) gradient boosting can differ in the last decimals. **No local setup?** On GitHub choose *Code → Codespaces → Create codespace*: the dev container installs everything and opens the demo. **Hosted demo:** `python scripts/build_hf_space.py` assembles a Hugging Face Docker Space in `dist/hf_space/`.
+
+**Versions.** The tag [`submission-2026-10-29`](https://github.com/NthabiM-07/fpl-portfolio-optimiser/tree/submission-2026-10-29) is the code as submitted for the case study. Later additions (the full-rules season planner, the TabICL challenger and the repository tooling) are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -310,7 +334,7 @@ An EWMA control chart (lambda = 0.2, 3-sigma limits) of weekly prediction error 
 - `src/fplopt/`: `data`, `features`, `model`, `optimise`, `baselines`, `backtest`, `monitor`, `reports`, `app` (Streamlit), plus `explain` (signal value), `audit` (xP forensics), `assistant` and `mcp_server` (AI-assistant tools), `planner` and `season` (15-man squad with transfers).
 - `tests/` (pytest, 37 tests). **Planner tests** check every squad keeps the FPL rules, extra transfers are charged exactly once beyond the free ones, a hit is never taken while a free transfer is unused, banked transfers cover several moves, a high hurdle stops paid transfers, the goalkeeper is only replaced by the bench goalkeeper, and automatic substitutions keep a legal formation and hand the armband to the vice-captain. **Property-based tests** (`tests/test_properties.py`, Hypothesis) generate random player pools and check that every solved team obeys every rule, that the MILP beats any random legal team, that more protection never raises the worst case, that the decomposition matches the direct robust MILP, that CQR reaches its coverage, and that the Diebold-Mariano test behaves. Hypothesis already caught a too-weak test of my own and shrank it to a one-line counter-example. **Assistant tests** check the AI tools never return an illegal team, honour locks, match names typed without special letters ("Odegaard" finds Ødegaard) and fail loudly on unknown or ambiguous players. The original unit tests: every team obeys every rule; every baseline obeys every rule; an infeasible budget raises a clear error; Gamma = 0 equals the risk-neutral team; the robust team cuts the worst-case exposure; locks and exclusions hold; the decomposition matches the direct robust MILP; CQR reaches its target coverage; the EWMA flags a persistent shift; one row per player-gameweek; no feature sees the future; rolling means use earlier rows only.
 - **Hosted demo kit:** `scripts/build_hf_space.py` packages the app, its modules and the precomputed reports as a Hugging Face Docker Space (`deploy/hf_space/`); upload instructions are in Quick start.
-- **CI:** GitHub Actions runs the tests on Python 3.11 and 3.12 on every push, plus a CLI smoke test. **Codespaces:** `.devcontainer/` installs everything and starts the demo.
+- **CI and reproducibility:** GitHub Actions runs lint (ruff), the tests and a CLI smoke test on every push on macOS, Windows and Linux (Python 3.11 to 3.13), plus a macOS job on the exact pinned versions in `requirements-lock.txt`. `pyproject.toml` makes the package installable (`pip install -e .`); `make setup test app` covers macOS and Linux. **Codespaces:** `.devcontainer/` installs everything and starts the demo.
 - **AI-assistant interface (MCP).** `python main.py mcp` serves four tools over the Model Context Protocol: `pick_team`, `explain_player`, `compare_risk`, `backtest_summary`. `.vscode/mcp.json` (GitHub Copilot agent mode) and `.mcp.json` (Claude Code) register it automatically when the repo is opened. The design rule: **the language model only interprets the request and chooses the tool; every number comes from the saved forecasts and an exact MILP**, so the assistant cannot invent a points figure or an illegal team. The same pattern suits a bank: the LLM is the interface, the governed model and optimiser are the engine.
 - **Scalability:** sparse constraint matrices; a single-gameweek solve grows linearly with players (about 0.1 s for 750); walk-forward training is about 15 s per block; the full rebuild takes about 10 minutes on two CPU cores. A multi-week horizon would roll, keeping each MILP small.
 

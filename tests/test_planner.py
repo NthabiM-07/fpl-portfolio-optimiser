@@ -34,7 +34,8 @@ def test_first_week_builds_a_legal_squad_and_xi():
 def test_extra_transfers_are_charged_and_a_high_hurdle_stops_them():
     mu, price, pos, club = _pool(1)
     first = plan_transfers(mu, price, pos, club, np.zeros(len(pos)), 15, 1000.0, PlanConfig())
-    current = np.zeros(len(pos)); current[first.squad] = 1
+    current = np.zeros(len(pos))
+    current[first.squad] = 1
     mu2 = mu.copy()
     outfield = [i for i in first.xi if pos[i] != "GK"][:2]
     mu2[:, outfield] = 0.0                        # two starters suddenly worthless: worth replacing both
@@ -75,7 +76,8 @@ def test_one_short_season_keeps_the_rules_every_week():
 def test_banked_free_transfers_cover_several_moves_and_hits_are_never_bought():
     mu, price, pos, club = _pool(2)
     first = plan_transfers(mu, price, pos, club, np.zeros(len(pos)), 15, 1000.0, PlanConfig())
-    current = np.zeros(len(pos)); current[first.squad] = 1
+    current = np.zeros(len(pos))
+    current[first.squad] = 1
     mu2 = mu.copy()
     mu2[:, [i for i in first.xi if pos[i] != "GK"][:3]] = 0.0
     banked = plan_transfers(mu2, price, pos, club, current, 3, 1000.0, PlanConfig(hit_cost=4))
