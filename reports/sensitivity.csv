@@ -1,0 +1,10 @@
+metric,value
+gameweeks where the budget binds,21.0
+"budget shadow price, predicted pts per extra GBP 1m (median, all GWs)",0.0397321834975449
+"budget shadow price (median, binding GWs only)",0.09200545680415596
+gameweeks where the club cap binds,11.0
+"club-cap cost, predicted pts (mean, all GWs)",0.8523892015369662
+"club-cap cost (mean, binding GWs only)",2.944617241673143
+club-cap cost (worst GW),15.546314631173004
+"most players from one club with no cap, in the worst GW",9.0
+mean XI cost (GBP m),80.48684210526316
