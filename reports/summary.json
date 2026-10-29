@@ -1,0 +1,361 @@
+{
+  "strategies_all_gws": [
+    {
+      "strategy": "model",
+      "mean_pts_per_gw": 58.4737,
+      "total_pts": 2222.0,
+      "uplift_vs_last_week_%": 25.5367,
+      "uplift_vs_mean_last5_%": 25.8924,
+      "uplift_vs_top_price_%": 73.4582,
+      "uplift_vs_random_%": 319.4035
+    },
+    {
+      "strategy": "model_single",
+      "mean_pts_per_gw": 53.1316,
+      "total_pts": 2019.0,
+      "uplift_vs_last_week_%": 14.0678,
+      "uplift_vs_mean_last5_%": 14.3909,
+      "uplift_vs_top_price_%": 57.6112,
+      "uplift_vs_random_%": 281.0872
+    },
+    {
+      "strategy": "mean_last5",
+      "mean_pts_per_gw": 46.4474,
+      "total_pts": 1765.0,
+      "uplift_vs_last_week_%": -0.2825,
+      "uplift_vs_mean_last5_%": 0.0,
+      "uplift_vs_top_price_%": 37.783,
+      "uplift_vs_random_%": 233.1446
+    },
+    {
+      "strategy": "last_week",
+      "mean_pts_per_gw": 46.5789,
+      "total_pts": 1770.0,
+      "uplift_vs_last_week_%": 0.0,
+      "uplift_vs_mean_last5_%": 0.2833,
+      "uplift_vs_top_price_%": 38.1733,
+      "uplift_vs_random_%": 234.0883
+    },
+    {
+      "strategy": "top_price",
+      "mean_pts_per_gw": 33.7105,
+      "total_pts": 1281.0,
+      "uplift_vs_last_week_%": -27.6271,
+      "uplift_vs_mean_last5_%": -27.4221,
+      "uplift_vs_top_price_%": 0.0,
+      "uplift_vs_random_%": 141.7894
+    },
+    {
+      "strategy": "random",
+      "mean_pts_per_gw": 13.9421,
+      "total_pts": 529.8,
+      "uplift_vs_last_week_%": -70.0678,
+      "uplift_vs_mean_last5_%": -69.983,
+      "uplift_vs_top_price_%": -58.6417,
+      "uplift_vs_random_%": 0.0
+    },
+    {
+      "strategy": "oracle",
+      "mean_pts_per_gw": 155.0,
+      "total_pts": 5890.0,
+      "uplift_vs_last_week_%": 232.7684,
+      "uplift_vs_mean_last5_%": 233.711,
+      "uplift_vs_top_price_%": 359.797,
+      "uplift_vs_random_%": 1011.7403
+    }
+  ],
+  "strategies_gw6_38": [
+    {
+      "strategy": "model",
+      "mean_pts_per_gw": 58.3333,
+      "total_pts": 1925.0,
+      "uplift_vs_last_week_%": 25.7348,
+      "uplift_vs_mean_last5_%": 24.5149,
+      "uplift_vs_top_price_%": 76.7677,
+      "uplift_vs_random_%": 329.7834
+    },
+    {
+      "strategy": "model_single",
+      "mean_pts_per_gw": 54.9394,
+      "total_pts": 1813.0,
+      "uplift_vs_last_week_%": 18.4193,
+      "uplift_vs_mean_last5_%": 17.2704,
+      "uplift_vs_top_price_%": 66.483,
+      "uplift_vs_random_%": 304.7779
+    },
+    {
+      "strategy": "mean_last5",
+      "mean_pts_per_gw": 46.8485,
+      "total_pts": 1546.0,
+      "uplift_vs_last_week_%": 0.9798,
+      "uplift_vs_mean_last5_%": 0.0,
+      "uplift_vs_top_price_%": 41.9651,
+      "uplift_vs_random_%": 245.1663
+    },
+    {
+      "strategy": "last_week",
+      "mean_pts_per_gw": 46.3939,
+      "total_pts": 1531.0,
+      "uplift_vs_last_week_%": 0.0,
+      "uplift_vs_mean_last5_%": -0.9702,
+      "uplift_vs_top_price_%": 40.5877,
+      "uplift_vs_random_%": 241.8174
+    },
+    {
+      "strategy": "top_price",
+      "mean_pts_per_gw": 33.0,
+      "total_pts": 1089.0,
+      "uplift_vs_last_week_%": -28.87,
+      "uplift_vs_mean_last5_%": -29.5602,
+      "uplift_vs_top_price_%": 0.0,
+      "uplift_vs_random_%": 143.1346
+    },
+    {
+      "strategy": "random",
+      "mean_pts_per_gw": 13.5727,
+      "total_pts": 447.9,
+      "uplift_vs_last_week_%": -70.7446,
+      "uplift_vs_mean_last5_%": -71.0285,
+      "uplift_vs_top_price_%": -58.8705,
+      "uplift_vs_random_%": 0.0
+    },
+    {
+      "strategy": "oracle",
+      "mean_pts_per_gw": 155.6364,
+      "total_pts": 5136.0,
+      "uplift_vs_last_week_%": 235.467,
+      "uplift_vs_mean_last5_%": 232.2122,
+      "uplift_vs_top_price_%": 371.6253,
+      "uplift_vs_random_%": 1046.6845
+    }
+  ],
+  "significance_all_gws": [
+    {
+      "model_vs": "last_week",
+      "mean_diff_pts_per_gw": 11.8947,
+      "ci95_low": 5.1572,
+      "ci95_high": 18.2895,
+      "model_better_gws": 25,
+      "gws": 38
+    },
+    {
+      "model_vs": "mean_last5",
+      "mean_diff_pts_per_gw": 12.0263,
+      "ci95_low": 6.1572,
+      "ci95_high": 17.6316,
+      "model_better_gws": 27,
+      "gws": 38
+    },
+    {
+      "model_vs": "top_price",
+      "mean_diff_pts_per_gw": 24.7632,
+      "ci95_low": 18.5,
+      "ci95_high": 31.0263,
+      "model_better_gws": 33,
+      "gws": 38
+    },
+    {
+      "model_vs": "random",
+      "mean_diff_pts_per_gw": 44.5316,
+      "ci95_low": 38.0183,
+      "ci95_high": 51.0395,
+      "model_better_gws": 37,
+      "gws": 38
+    },
+    {
+      "model_vs": "model_single",
+      "mean_diff_pts_per_gw": 5.3421,
+      "ci95_low": 0.7625,
+      "ci95_high": 10.0263,
+      "model_better_gws": 23,
+      "gws": 38
+    }
+  ],
+  "forecast_accuracy": [
+    {
+      "forecast": "two_stage",
+      "rmse": 1.9382,
+      "mae": 0.9776,
+      "rmse_GK": 1.4085,
+      "rmse_DEF": 2.1235,
+      "rmse_MID": 1.8712,
+      "rmse_FWD": 2.1004,
+      "rmse_played": 2.9697,
+      "rmse_0-2 pts": 1.0437,
+      "rmse_3-4 pts": 1.4708,
+      "rmse_5+ pts": 5.5925
+    },
+    {
+      "forecast": "single_gbm",
+      "rmse": 1.9417,
+      "mae": 0.9898,
+      "rmse_GK": 1.413,
+      "rmse_DEF": 2.1272,
+      "rmse_MID": 1.8729,
+      "rmse_FWD": 2.1094,
+      "rmse_played": 2.9745,
+      "rmse_0-2 pts": 1.0424,
+      "rmse_3-4 pts": 1.4952,
+      "rmse_5+ pts": 5.6047
+    },
+    {
+      "forecast": "mean_last5",
+      "rmse": 2.1442,
+      "mae": 1.0664,
+      "rmse_GK": 1.5921,
+      "rmse_DEF": 2.3438,
+      "rmse_MID": 2.0728,
+      "rmse_FWD": 2.3062,
+      "rmse_played": 3.2441,
+      "rmse_0-2 pts": 1.3333,
+      "rmse_3-4 pts": 1.9462,
+      "rmse_5+ pts": 5.7539
+    },
+    {
+      "forecast": "last_week",
+      "rmse": 2.6134,
+      "mae": 1.1629,
+      "rmse_GK": 1.962,
+      "rmse_DEF": 2.8948,
+      "rmse_MID": 2.491,
+      "rmse_FWD": 2.8075,
+      "rmse_played": 4.0344,
+      "rmse_0-2 pts": 1.84,
+      "rmse_3-4 pts": 3.2971,
+      "rmse_5+ pts": 6.187
+    }
+  ],
+  "interval_coverage": [
+    {
+      "group": "ALL",
+      "coverage": 0.9179,
+      "raw_coverage": 0.9179,
+      "mean_width": 2.6443
+    },
+    {
+      "group": "DEF",
+      "coverage": 0.9077,
+      "raw_coverage": 0.9077,
+      "mean_width": 2.8541
+    },
+    {
+      "group": "FWD",
+      "coverage": 0.9249,
+      "raw_coverage": 0.9249,
+      "mean_width": 3.1505
+    },
+    {
+      "group": "GK",
+      "coverage": 0.9456,
+      "raw_coverage": 0.9456,
+      "mean_width": 1.5597
+    },
+    {
+      "group": "MID",
+      "coverage": 0.9165,
+      "raw_coverage": 0.9165,
+      "mean_width": 2.6456
+    },
+    {
+      "group": "played only",
+      "coverage": 0.8076,
+      "raw_coverage": 0.8076,
+      "mean_width": 5.5228
+    }
+  ],
+  "robust_frontier": [
+    {
+      "gamma": 0,
+      "mean": 58.4737,
+      "p10": 33.7,
+      "worst": 18.0,
+      "sd": 19.8736
+    },
+    {
+      "gamma": 1,
+      "mean": 58.4737,
+      "p10": 33.7,
+      "worst": 18.0,
+      "sd": 19.8736
+    },
+    {
+      "gamma": 2,
+      "mean": 58.4737,
+      "p10": 34.7,
+      "worst": 18.0,
+      "sd": 19.6589
+    },
+    {
+      "gamma": 3,
+      "mean": 57.7105,
+      "p10": 37.1,
+      "worst": 18.0,
+      "sd": 19.0815
+    },
+    {
+      "gamma": 4,
+      "mean": 58.1842,
+      "p10": 37.7,
+      "worst": 18.0,
+      "sd": 19.1154
+    },
+    {
+      "gamma": 6,
+      "mean": 57.6316,
+      "p10": 34.4,
+      "worst": 18.0,
+      "sd": 18.7709
+    },
+    {
+      "gamma": 8,
+      "mean": 56.8158,
+      "p10": 35.5,
+      "worst": 18.0,
+      "sd": 18.6052
+    }
+  ],
+  "sensitivity": [
+    {
+      "metric": "budget shadow price, predicted pts per extra GBP 1m (median)",
+      "value": 0.0397
+    },
+    {
+      "metric": "gameweeks where budget binds",
+      "value": 21.0
+    },
+    {
+      "metric": "club-cap cost, predicted pts (mean)",
+      "value": 0.8524
+    },
+    {
+      "metric": "gameweeks where club cap binds",
+      "value": 11.0
+    },
+    {
+      "metric": "mean XI cost (GBP m)",
+      "value": 80.4868
+    }
+  ],
+  "ewma_signals": [
+    {
+      "position": "DEF",
+      "first_signal_gw": 3.0,
+      "mean_error": 0.0829
+    },
+    {
+      "position": "FWD",
+      "first_signal_gw": NaN,
+      "mean_error": -0.0192
+    },
+    {
+      "position": "GK",
+      "first_signal_gw": NaN,
+      "mean_error": -0.0052
+    },
+    {
+      "position": "MID",
+      "first_signal_gw": NaN,
+      "mean_error": -0.0239
+    }
+  ]
+}
