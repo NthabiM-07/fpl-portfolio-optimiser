@@ -1,5 +1,7 @@
 # FPL team selection as constrained portfolio optimisation
 
+**Nthabiseng Maoka** · [![tests](https://github.com/NthabiM-07/fpl-portfolio-optimiser/actions/workflows/tests.yml/badge.svg)](https://github.com/NthabiM-07/fpl-portfolio-optimiser/actions/workflows/tests.yml) · Python 3.11–3.13 · macOS, Windows, Linux · MIT licence
+
 **Problem 2 (Fantasy Sports Team Optimiser).** A two-stage machine-learning model predicts each player's points with a calibrated interval; an exact mixed-integer programme picks the best legal XI and captain; a walk-forward backtest over every gameweek of the **2025-26 Premier League season** scores the picks against baselines that obey the same rules.
 
 > **Headline (2025-26, all 38 gameweeks, out of sample):** the model's XI scored **58.5 points per gameweek**. That is **+25.5% vs last week's points** (paired bootstrap 95% CI +5.2 to +18.3 pts/GW), **+25.9% vs the 5-week average** (CI +6.2 to +17.6), **+73.5% vs the most expensive XI** and **+319% vs a random legal XI**. The 15% target is cleared against every baseline, with confidence intervals that exclude zero.
@@ -55,7 +57,7 @@ python main.py mcp                        # serve the optimiser to an AI assista
 
 **Reproducibility.** Every random step is seeded and every split is by time. `requirements-lock.txt` pins the versions the committed results were produced with; `requirements.txt` gives the minimum versions. Re-running `backtest` reproduces the committed numbers on the locked versions; on other versions or chips (for example Apple silicon) gradient boosting can differ in the last decimals. **No local setup?** On GitHub choose *Code → Codespaces → Create codespace*: the dev container installs everything and opens the demo. **Hosted demo:** `python scripts/build_hf_space.py` assembles a Hugging Face Docker Space in `dist/hf_space/`.
 
-**Versions.** The tag [`submission-2026-10-29`](https://github.com/NthabiM-07/fpl-portfolio-optimiser/tree/submission-2026-10-29) is the code as submitted for the case study. Later additions (the full-rules season planner, the TabICL challenger and the repository tooling) are listed in [CHANGELOG.md](CHANGELOG.md).
+**Versions.** Commit [`8dfb238`](https://github.com/NthabiM-07/fpl-portfolio-optimiser/tree/8dfb238) is the code as submitted for the case study. Later additions (the full-rules season planner, the TabICL challenger and the repository tooling) are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

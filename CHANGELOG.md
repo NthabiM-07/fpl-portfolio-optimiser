@@ -9,4 +9,4 @@
 
 ## 1.0.0 (29 October 2026, submitted)
 
-Tag [`submission-2026-10-29`](https://github.com/NthabiM-07/fpl-portfolio-optimiser/tree/submission-2026-10-29): two-stage model with Mondrian CQR intervals, exact MILP selection with a calibrated Bertsimas-Sim robustness budget, walk-forward backtest with paired bootstrap and Diebold-Mariano tests, decision-focused signal value, xP leakage forensics, Streamlit demo, MCP tools and 31 tests.
+Commit [`8dfb238`](https://github.com/NthabiM-07/fpl-portfolio-optimiser/tree/8dfb238): two-stage model with Mondrian CQR intervals, exact MILP selection with a calibrated Bertsimas-Sim robustness budget, walk-forward backtest with paired bootstrap and Diebold-Mariano tests, decision-focused signal value, xP leakage forensics, Streamlit demo, MCP tools and 31 tests.
