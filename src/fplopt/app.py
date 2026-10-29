@@ -33,7 +33,8 @@ def load():
     rob = pd.read_csv(REPORTS_DIR / "robust_results.csv")
     tabs = {n: pd.read_csv(REPORTS_DIR / f"{n}.csv") for n in
             ["strategies_all_gws", "strategies_gw6_38", "significance_all_gws", "forecast_accuracy", "interval_coverage", "sensitivity"]}
-    for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks", "robust_calibrated"]:  # optional extras
+    for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks", "robust_calibrated",
+              "season_summary", "season_gw", "season_tuning", "season_selected_detail"]:  # optional extras
         f = REPORTS_DIR / f"{n}.csv"
         tabs[n] = pd.read_csv(f) if f.exists() else None
     return pred, gw, rob, tabs
@@ -69,7 +70,8 @@ with st.sidebar:
     lock = st.multiselect("Must include", labels)
     excl = st.multiselect("Exclude", labels)
 
-tab_pick, tab_bt, tab_risk, tab_model, tab_sens = st.tabs(["Team", "Backtest", "Risk dial", "Model quality", "Sensitivity"])
+tab_pick, tab_bt, tab_season, tab_risk, tab_model, tab_sens = st.tabs(
+    ["Team", "Backtest", "Season (full rules)", "Risk dial", "Model quality", "Sensitivity"])
 
 with tab_pick:
     d = (c["mu"] - c["lo"]).clip(lower=0).to_numpy()
@@ -130,6 +132,30 @@ with tab_bt:
     b.dataframe(tabs["significance_all_gws"].assign(model_vs=lambda t: t.model_vs.map(NAMES)).round(2), hide_index=True)
     st.markdown("**Gameweeks 6-38 only** (pre-declared secondary view)")
     st.dataframe(tabs["strategies_gw6_38"].assign(strategy=lambda t: t.strategy.map(NAMES)).round(1), hide_index=True)
+
+with tab_season:
+    if tabs["season_summary"] is None:
+        st.info("Run `python main.py season` to add the full-rules season backtest.")
+    else:
+        st.markdown("**The real game:** a 15-man squad (2 GK, 5 DEF, 5 MID, 3 FWD) within GBP 100m, one free transfer a "
+                    "week (bank up to 5), 4 points per extra transfer, automatic substitutions. Each week a rolling-horizon "
+                    "MILP plans the next weeks and only this week's moves are made. The horizon and the transfer hurdle were "
+                    "chosen on gameweeks 1-19; gameweeks 20-38 are the honest test.")
+        sg = tabs["season_gw"]
+        long = sg.melt(id_vars="GW", var_name="strategy", value_name="points")
+        long["cumulative"] = long.groupby("strategy")["points"].cumsum()
+        fig = px.line(long, x="GW", y="cumulative", color="strategy", title="Cumulative points after hits, 2025-26")
+        fig.add_vline(x=19.5, line_dash="dot", line_color=GREY)
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(tabs["season_summary"].round(1), hide_index=True)
+        st.markdown("**Tuning on gameweeks 1-19** (planning penalty per extra transfer = the hurdle; FPL charges 4)")
+        st.dataframe(tabs["season_tuning"].round(1), hide_index=True)
+        st.caption("Charging the planner only the real 4-point cost makes it over-trade: every forecast it acts on is "
+                   "slightly too optimistic for the player it picks (the optimiser's curse), so it chases noise. A higher "
+                   "hurdle is a deadband, like not adjusting a stable process (Deming's funnel).")
+        if tabs["season_selected_detail"] is not None:
+            with st.expander("Week-by-week moves of the selected strategy"):
+                st.dataframe(tabs["season_selected_detail"].round(1), hide_index=True)
 
 with tab_risk:
     fr = rob.groupby("gamma")["realised"].agg(mean="mean", p10=lambda x: x.quantile(0.1), worst="min").reset_index()
