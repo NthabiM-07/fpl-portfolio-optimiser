@@ -22,7 +22,7 @@ from fplopt.optimise import InfeasibleTeamError, realised_points, solve_team  # 
 
 st.set_page_config(page_title="FPL portfolio optimiser", layout="wide")
 GREEN, RED, GREY, BLUE = "#1E4D3A", "#B5473A", "#9AA19D", "#4C72B0"
-NAMES = {"model": "Two-stage model", "model_single": "Single GBM", "mean_last5": "Mean of last 5",
+NAMES = {"model": "Two-stage model", "model_robust_cal": "Two-stage + calibrated Γ", "model_single": "Single GBM", "mean_last5": "Mean of last 5",
          "last_week": "Last week", "top_price": "Most expensive", "random": "Random valid", "oracle": "Hindsight oracle"}
 
 
@@ -33,7 +33,7 @@ def load():
     rob = pd.read_csv(REPORTS_DIR / "robust_results.csv")
     tabs = {n: pd.read_csv(REPORTS_DIR / f"{n}.csv") for n in
             ["strategies_all_gws", "strategies_gw6_38", "significance_all_gws", "forecast_accuracy", "interval_coverage", "sensitivity"]}
-    for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks"]:          # optional extras
+    for n in ["forecast_dm", "xp_audit", "xp_partial", "signal_value", "cqr_blocks", "robust_calibrated"]:  # optional extras
         f = REPORTS_DIR / f"{n}.csv"
         tabs[n] = pd.read_csv(f) if f.exists() else None
     return pred, gw, rob, tabs
@@ -148,6 +148,11 @@ with tab_risk:
     st.caption("Γ = how many players may fall to the bottom of their 80% interval at once. The MILP protects against the worst Γ of them. "
                "Robust picks are solved on the top 60 candidates per position by expected points, on a 32-point θ grid. "
                "The effect is not monotone in Γ and 38 weeks is a small sample: read it as suggestive, not proven.")
+    if tabs["robust_calibrated"] is not None:
+        st.markdown("**Γ chosen from data, not by hand.** Each week, Γ = the 80th percentile of the uncertainty budget the "
+                    "risk-neutral XI actually used in *previous* weeks (each player's shortfall as a share of his allowed "
+                    "downside, summed). Declared before looking at results; switches on after 4 weeks.")
+        st.dataframe(tabs["robust_calibrated"].round(1), hide_index=True)
 
 with tab_model:
     st.markdown("**Forecast accuracy, 2025-26 (out of sample, walk-forward).** Buckets follow OpenFPL (Groos 2025): "

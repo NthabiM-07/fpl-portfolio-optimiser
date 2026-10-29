@@ -85,10 +85,28 @@ def walk_forward_predict(F: pd.DataFrame, s: Settings = SETTINGS, test_season: s
     return pd.concat(out).reset_index(drop=True)
 
 
+def budget_used(mu: np.ndarray, lo: np.ndarray, y: np.ndarray) -> float:
+    """How much of the Bertsimas-Sim uncertainty budget a team actually used: each player's shortfall
+    as a fraction of his allowed downside d = mu - lo, capped at 1, summed over the XI."""
+    d = np.clip(mu - lo, 1e-9, None)
+    return float(np.clip((mu - y) / d, 0, 1).sum())
+
+
+def calibrated_gamma(history: list[float], quantile: float, min_history: int) -> float:
+    """Choose the robust budget from data instead of by hand: the `quantile` of the budget the
+    risk-neutral XI used in PAST gameweeks (0 until `min_history` weeks exist), rounded to a whole
+    player. In the spirit of Zhou & Zhu (2025, arXiv:2510.07750), who calibrate robustness levels
+    from data; this is the simplest leakage-free version, using only gameweeks already played."""
+    if len(history) < min_history:
+        return 0.0
+    return float(np.round(np.quantile(history, quantile)))
+
+
 def decide(pred: pd.DataFrame, s: Settings = SETTINGS) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return (gw_results, robust_results): realised XI points per gameweek and strategy."""
     rng = np.random.default_rng(s.seed)
     rows, rob = [], []
+    shortfalls: list[int] = []
     for gw, c in pred.groupby("GW"):
         c = c.reset_index(drop=True)
         scores = {"model": c["mu"].to_numpy(), "model_single": c["mu_single"].to_numpy(),
@@ -100,6 +118,7 @@ def decide(pred: pd.DataFrame, s: Settings = SETTINGS) -> tuple[pd.DataFrame, pd
             if name == "model":
                 rec["model_predicted"] = team.objective
                 rec["model_cost"] = c["value"].to_numpy()[team.idx].sum() / 10
+                model_team = team
         rnd = [realised_points(c, solve_team(c, rng.random(len(c)), s.budget_tenths, s.club_cap, s.captain))
                for _ in range(s.random_baseline_seeds)]
         rec["random"] = float(np.mean(rnd))
@@ -118,6 +137,20 @@ def decide(pred: pd.DataFrame, s: Settings = SETTINGS) -> tuple[pd.DataFrame, pd
             rob.append({"GW": gw, "gamma": g, "realised": realised_points(cc, team),
                         "predicted_mu": float(cc["mu"].to_numpy()[team.idx].sum() + (cc["mu"].to_numpy()[team.captain] if team.captain is not None else 0)),
                         "downside_sum": float(d[team.idx].sum())})
+        # Calibrated Gamma: chosen from past weeks only, then scored on this week.
+        g_cal = calibrated_gamma(shortfalls, s.gamma_quantile, s.gamma_min_history)
+        if g_cal > 0:
+            t_cal = solve_team(cc, cc["mu"].to_numpy(), s.budget_tenths, s.club_cap, s.captain, d=d, gamma=g_cal, thetas=32)
+            rec["model_robust_cal"] = realised_points(cc, t_cal)
+            rec["robust_floor"] = t_cal.objective          # the worst case the robust team was built to beat
+        else:
+            rec["model_robust_cal"] = rec["model"]
+            rec["robust_floor"] = np.nan
+        rec["gamma_cal"] = g_cal
+        idx = model_team.idx
+        used = budget_used(c["mu"].to_numpy()[idx], c["lo"].to_numpy()[idx], c["total_points"].to_numpy(float)[idx])
+        rec["budget_used_model_xi"] = used
+        shortfalls.append(used)                  # revealed after the gameweek; used from the next one on
         log.info("GW%d done", gw)
     return pd.DataFrame(rows), pd.DataFrame(rob)
 
@@ -130,7 +163,8 @@ def paired_bootstrap(a: np.ndarray, b: np.ndarray, n_boot: int = 10000, seed: in
 
 def strategy_table(gw: pd.DataFrame, gw_from: int = 1) -> pd.DataFrame:
     g = gw[gw["GW"] >= gw_from]
-    strategies = ["model", "model_single", "mean_last5", "last_week", "top_price", "random", "oracle"]
+    strategies = ["model", "model_robust_cal", "model_single", "mean_last5", "last_week", "top_price", "random", "oracle"]
+    strategies = [st for st in strategies if st in g.columns]
     rows = []
     for st in strategies:
         r = {"strategy": st, "mean_pts_per_gw": g[st].mean(), "total_pts": g[st].sum()}
@@ -138,6 +172,23 @@ def strategy_table(gw: pd.DataFrame, gw_from: int = 1) -> pd.DataFrame:
             r[f"uplift_vs_{base}_%"] = 100 * (g[st].mean() / g[base].mean() - 1)
         rows.append(r)
     return pd.DataFrame(rows)
+
+
+def robust_calibrated_table(gw: pd.DataFrame) -> pd.DataFrame:
+    """Risk-neutral XI vs the XI with the data-calibrated Gamma, over the same 38 gameweeks."""
+    rows = []
+    for st, label in [("model", "risk-neutral (Gamma = 0)"), ("model_robust_cal", "calibrated Gamma (80th pct of past budget used)")]:
+        x = gw[st]
+        rows.append({"strategy": label, "mean": x.mean(), "p10": x.quantile(0.1), "worst": x.min(), "sd": x.std()})
+    out = pd.DataFrame(rows)
+    m, lo, hi = paired_bootstrap(gw["model_robust_cal"], gw["model"])
+    on = gw["robust_floor"].notna()
+    out.attrs.update(diff=m, ci_low=lo, ci_high=hi, gammas=gw["gamma_cal"].value_counts().sort_index().to_dict(),
+                     budget_used_median=float(gw["budget_used_model_xi"].median()),
+                     budget_used_q80=float(gw["budget_used_model_xi"].quantile(0.8)),
+                     floor_beaten_share=float((gw.loc[on, "model_robust_cal"] >= gw.loc[on, "robust_floor"]).mean()),
+                     floor_weeks=int(on.sum()))
+    return out
 
 
 def significance_table(gw: pd.DataFrame, gw_from: int = 1) -> pd.DataFrame:

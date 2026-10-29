@@ -29,6 +29,9 @@ class Settings:
     calib_gws: int = 8                # rolling conformal window (gameweeks of out-of-sample scores)
     interval_alpha: float = 0.2       # 80% prediction interval
     gammas: tuple = field(default=(0, 1, 2, 3, 4, 6, 8))  # robust budgets of uncertainty to sweep
+    gamma_quantile: float = 0.8       # calibrated Gamma: the 80th percentile of the uncertainty budget used in past weeks
+                                      # (same 80% level as the prediction intervals, declared before looking at results)
+    gamma_min_history: int = 4        # gameweeks of history before the calibrated Gamma switches on (0 before)
     random_baseline_seeds: int = 10
     seed: int = 42
 

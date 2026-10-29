@@ -10,6 +10,15 @@
       "uplift_vs_random_%": 319.4035
     },
     {
+      "strategy": "model_robust_cal",
+      "mean_pts_per_gw": 57.5263,
+      "total_pts": 2186.0,
+      "uplift_vs_last_week_%": 23.5028,
+      "uplift_vs_mean_last5_%": 23.8527,
+      "uplift_vs_top_price_%": 70.6479,
+      "uplift_vs_random_%": 312.6085
+    },
+    {
       "strategy": "model_single",
       "mean_pts_per_gw": 53.1316,
       "total_pts": 2019.0,
@@ -73,6 +82,15 @@
       "uplift_vs_mean_last5_%": 24.5149,
       "uplift_vs_top_price_%": 76.7677,
       "uplift_vs_random_%": 329.7834
+    },
+    {
+      "strategy": "model_robust_cal",
+      "mean_pts_per_gw": 56.7879,
+      "total_pts": 1874.0,
+      "uplift_vs_last_week_%": 22.4037,
+      "uplift_vs_mean_last5_%": 21.216,
+      "uplift_vs_top_price_%": 72.0845,
+      "uplift_vs_random_%": 318.397
     },
     {
       "strategy": "model_single",
@@ -421,6 +439,22 @@
       "others": 0.0
     }
   ],
+  "robust_calibrated": [
+    {
+      "strategy": "risk-neutral (Gamma = 0)",
+      "mean": 58.4737,
+      "p10": 33.7,
+      "worst": 18.0,
+      "sd": 19.8736
+    },
+    {
+      "strategy": "calibrated Gamma (80th pct of past budget used)",
+      "mean": 57.5263,
+      "p10": 36.4,
+      "worst": 18.0,
+      "sd": 19.1703
+    }
+  ],
   "xp_audit": [
     {
       "forecast": "two-stage model (pre-match)",
@@ -579,5 +613,19 @@
     24,
     29,
     38
-  ]
+  ],
+  "robust_calibrated_attrs": {
+    "diff": -0.9473684210526315,
+    "ci_low": -2.9473684210526314,
+    "ci_high": 1.0526315789473684,
+    "gammas": {
+      "0.0": 4,
+      "5.0": 11,
+      "6.0": 23
+    },
+    "budget_used_median": 4.463532157232676,
+    "budget_used_q80": 5.678998949308594,
+    "floor_beaten_share": 0.9117647058823529,
+    "floor_weeks": 34
+  }
 }

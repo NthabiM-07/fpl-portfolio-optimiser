@@ -3,6 +3,7 @@
 | strategy | mean_pts_per_gw | total_pts | uplift_vs_last_week_% | uplift_vs_mean_last5_% | uplift_vs_top_price_% | uplift_vs_random_% |
 |---|---|---|---|---|---|---|
 | model | 58.474 | 2222 | 25.537 | 25.892 | 73.458 | 319.404 |
+| model_robust_cal | 57.526 | 2186 | 23.503 | 23.853 | 70.648 | 312.609 |
 | model_single | 53.132 | 2019 | 14.068 | 14.391 | 57.611 | 281.087 |
 | mean_last5 | 46.447 | 1765 | -0.282 | 0 | 37.783 | 233.145 |
 | last_week | 46.579 | 1770 | 0 | 0.283 | 38.173 | 234.088 |
@@ -15,6 +16,7 @@
 | strategy | mean_pts_per_gw | total_pts | uplift_vs_last_week_% | uplift_vs_mean_last5_% | uplift_vs_top_price_% | uplift_vs_random_% |
 |---|---|---|---|---|---|---|
 | model | 58.333 | 1925 | 25.735 | 24.515 | 76.768 | 329.783 |
+| model_robust_cal | 56.788 | 1874 | 22.404 | 21.216 | 72.084 | 318.397 |
 | model_single | 54.939 | 1813 | 18.419 | 17.27 | 66.483 | 304.778 |
 | mean_last5 | 46.848 | 1546 | 0.98 | 0 | 41.965 | 245.166 |
 | last_week | 46.394 | 1531 | 0 | -0.97 | 40.588 | 241.817 |
@@ -86,6 +88,13 @@
 | GW29-32 | 0 | 0 |
 | GW33-36 | 0 | 0 |
 | GW37-38 | 0 | 0 |
+
+### robust_calibrated
+
+| strategy | mean | p10 | worst | sd |
+|---|---|---|---|---|
+| risk-neutral (Gamma = 0) | 58.474 | 33.7 | 18 | 19.874 |
+| calibrated Gamma (80th pct of past budget used) | 57.526 | 36.4 | 18 | 19.17 |
 
 ### xp_audit
 

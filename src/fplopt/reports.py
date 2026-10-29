@@ -12,7 +12,7 @@ import pandas as pd  # noqa: E402
 
 from .audit import xp_audit  # noqa: E402
 from .backtest import (cqr_blocks, forecast_dm_table, forecast_table, interval_table,  # noqa: E402
-                       significance_table, strategy_table)
+                       robust_calibrated_table, significance_table, strategy_table)
 from .config import FIGURES_DIR, REPORTS_DIR  # noqa: E402
 from .monitor import ewma_chart, weekly_error_by_position  # noqa: E402
 
@@ -58,6 +58,8 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
         "interval_coverage": interval_table(pred).reset_index().rename(columns={"index": "group", "g": "group"}),
         "cqr_blocks": cqr_blocks(pred),
     }
+    rc = robust_calibrated_table(gw)
+    tabs["robust_calibrated"] = rc
     xa = xp_audit(pred)
     tabs["xp_audit"], tabs["xp_partial"] = xa["xp_audit"], xa["xp_partial"]
     rsum = (rob.groupby("gamma")["realised"].agg(mean="mean", p10=lambda s: s.quantile(0.1), worst="min", sd="std")
@@ -156,6 +158,8 @@ def write_all(pred: pd.DataFrame, gw: pd.DataFrame, rob: pd.DataFrame) -> dict:
 
     summary = {k: v.round(4).to_dict(orient="records") for k, v in tabs.items()}
     summary["xp_audit_gws"] = tabs["xp_audit"].attrs.get("gws", [])
+    summary["robust_calibrated_attrs"] = {k: (v if not isinstance(v, dict) else {str(a): int(b) for a, b in v.items()})
+                                          for k, v in rc.attrs.items()}
     (REPORTS_DIR / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     return tabs
 

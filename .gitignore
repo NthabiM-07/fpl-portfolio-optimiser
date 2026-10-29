@@ -6,3 +6,4 @@ data/processed/
 .streamlit/secrets.toml
 .DS_Store
 .hypothesis/
+dist/

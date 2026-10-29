@@ -8,11 +8,11 @@
 
 **Beyond the brief:**
 - **Decision-focused evaluation.** Scrambling each signal family shows that RMSE badly understates some signals: market signals and fixtures barely move RMSE, yet scrambling them costs the picked team 7-8 points a week (§7).
-- **Conformal calibration feeding robust optimisation.** Intervals are calibrated out of sample per playing-status group (Mondrian CQR) and feed a Bertsimas-Sim uncertainty budget (§4, §5).
+- **Calibrated robust optimisation.** Intervals are calibrated out of sample per playing-status group (Mondrian CQR) and feed a Bertsimas-Sim uncertainty budget whose size Gamma is itself chosen from past data by a rule declared in advance; the robust team beat its guaranteed floor in 31 of 34 weeks (§4, §5, §7).
 - **Leakage forensics.** I tested FPL's own `xP` column instead of trusting it. Its edge fades a week later and tracks same-week goals and bonus, which strongly suggests post-match information (§7).
 - **Forecast significance.** The model's forecast error is lower than both naive baselines in every one of the 38 gameweeks (Diebold-Mariano, p < 0.0001).
 - **An AI-assistant interface.** An MCP server lets Claude or GitHub Copilot call the optimiser ("pick my GW 20 team under GBP 80m without Haaland"). The LLM routes the request; every number comes from the MILP (§10).
-- **Engineering.** 29 tests including Hypothesis property-based tests, GitHub Actions CI, and a dev container that opens the demo in Codespaces.
+- **Engineering.** 31 tests including Hypothesis property-based tests, GitHub Actions CI, and a dev container that opens the demo in Codespaces.
 
 ---
 
@@ -22,14 +22,14 @@
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python main.py app            # interactive demo, runs offline from reports/ (about 10 seconds)
-pytest -q                     # 29 tests (unit + property-based), about 1 minute
+pytest -q                     # 31 tests (unit + property-based), about 1 minute
 python main.py backtest       # optional: rebuild everything from raw data (about 10 minutes on a laptop)
 python main.py explain        # optional: decision-focused signal importance (about 3 minutes)
 python main.py pick --gw 20 --gamma 4     # print a robust XI for one gameweek
 python main.py mcp            # serve the optimiser to an AI assistant (see §10)
 ```
 
-Python 3.10+; no GPU, no internet needed (the four season files are committed under `data/raw/`). **No local setup?** On GitHub, choose *Code → Codespaces → Create codespace*: the dev container installs everything and opens the demo.
+Python 3.10+; no GPU, no internet needed (the four season files are committed under `data/raw/`). **No local setup?** On GitHub, choose *Code → Codespaces → Create codespace*: the dev container installs everything and opens the demo. **Hosted demo:** `python scripts/build_hf_space.py` assembles a Hugging Face Docker Space in `dist/hf_space/` (Streamlit is no longer a built-in Spaces SDK, so the kit uses the Docker template); create an empty private Docker Space on huggingface.co and run `hf upload <user>/<space-name> dist/hf_space . --repo-type space`.
 
 ---
 
@@ -212,6 +212,15 @@ The conformal correction was 0 in every block (see §4), so these are the raw qu
 
 Every Gamma tested is shown. Gamma = 1-3 changes nothing; from Gamma = 4 the 10th-percentile week rises by 1.8 to 3.4 points at little or no cost to the mean, but the worst week never moves and the effect is not monotone. With 38 weeks, read it as suggestive, not proven. (Sweep: top 60 per position, 32-point theta grid.)
 
+**Choosing Gamma from data, not by hand.** A sweep invites picking the best Gamma after the fact. So the backtest also runs a rule declared in advance: each week, Gamma = the 80th percentile (the same 80% level as the intervals) of the uncertainty budget the risk-neutral XI *actually used* in previous weeks, where each player's shortfall counts as a share of his allowed downside, capped at 1, and summed over the XI. It switches on after 4 weeks and uses only gameweeks already played. This follows the idea of calibrating robustness levels from data (Zhou & Zhu 2025).
+
+| Strategy | Mean pts/GW | 10th-percentile week | Worst week |
+|---|---|---|---|
+| Risk-neutral (Gamma = 0) | 58.5 | 33.7 | 18 |
+| Calibrated Gamma (5-6 from GW 5) | 57.5 | **36.4** | 18 |
+
+The XI used a median of 4.5 players' worth of downside a week, so the rule settled on Gamma = 5-6. It gives up 0.9 points a week on average (paired bootstrap CI -2.9 to +1.1, not significant) for a 10th-percentile week 2.7 points higher, and **the robust team beat the floor it was built to guarantee in 31 of 34 weeks (91%, against an 80% target)**. The worst week is untouched: no budget-based protection saves a week where most of the XI blanks.
+
 ### Sensitivity
 
 - The budget binds in 21 of 38 gameweeks, but its shadow price is small: a median of 0.09 expected points per extra GBP 1m in the weeks it binds (0.04 over all weeks).
@@ -242,7 +251,8 @@ An EWMA control chart (lambda = 0.2, 3-sigma limits) of weekly prediction error 
 ## 10. Engineering
 
 - `src/fplopt/`: `data`, `features`, `model`, `optimise`, `baselines`, `backtest`, `monitor`, `reports`, `app` (Streamlit), plus `explain` (signal value), `audit` (xP forensics), `assistant` and `mcp_server` (AI-assistant tools).
-- `tests/` (pytest, 29 tests). **Property-based tests** (`tests/test_properties.py`, Hypothesis) generate random player pools and check that every solved team obeys every rule, that the MILP beats any random legal team, that more protection never raises the worst case, that the decomposition matches the direct robust MILP, that CQR reaches its coverage, and that the Diebold-Mariano test behaves. Hypothesis already caught a too-weak test of my own and shrank it to a one-line counter-example. **Assistant tests** check the AI tools never return an illegal team, honour locks, match names typed without special letters ("Odegaard" finds Ødegaard) and fail loudly on unknown or ambiguous players. The original unit tests: every team obeys every rule; every baseline obeys every rule; an infeasible budget raises a clear error; Gamma = 0 equals the risk-neutral team; the robust team cuts the worst-case exposure; locks and exclusions hold; the decomposition matches the direct robust MILP; CQR reaches its target coverage; the EWMA flags a persistent shift; one row per player-gameweek; no feature sees the future; rolling means use earlier rows only.
+- `tests/` (pytest, 31 tests). **Property-based tests** (`tests/test_properties.py`, Hypothesis) generate random player pools and check that every solved team obeys every rule, that the MILP beats any random legal team, that more protection never raises the worst case, that the decomposition matches the direct robust MILP, that CQR reaches its coverage, and that the Diebold-Mariano test behaves. Hypothesis already caught a too-weak test of my own and shrank it to a one-line counter-example. **Assistant tests** check the AI tools never return an illegal team, honour locks, match names typed without special letters ("Odegaard" finds Ødegaard) and fail loudly on unknown or ambiguous players. The original unit tests: every team obeys every rule; every baseline obeys every rule; an infeasible budget raises a clear error; Gamma = 0 equals the risk-neutral team; the robust team cuts the worst-case exposure; locks and exclusions hold; the decomposition matches the direct robust MILP; CQR reaches its target coverage; the EWMA flags a persistent shift; one row per player-gameweek; no feature sees the future; rolling means use earlier rows only.
+- **Hosted demo kit:** `scripts/build_hf_space.py` packages the app, its modules and the precomputed reports as a Hugging Face Docker Space (`deploy/hf_space/`); upload instructions are in Quick start.
 - **CI:** GitHub Actions runs the tests on Python 3.11 and 3.12 on every push, plus a CLI smoke test. **Codespaces:** `.devcontainer/` installs everything and starts the demo.
 - **AI-assistant interface (MCP).** `python main.py mcp` serves four tools over the Model Context Protocol: `pick_team`, `explain_player`, `compare_risk`, `backtest_summary`. `.vscode/mcp.json` (GitHub Copilot agent mode) and `.mcp.json` (Claude Code) register it automatically when the repo is opened. The design rule: **the language model only interprets the request and chooses the tool; every number comes from the saved forecasts and an exact MILP**, so the assistant cannot invent a points figure or an illegal team. The same pattern suits a bank: the LLM is the interface, the governed model and optimiser are the engine.
 - **Scalability:** sparse constraint matrices; a single-gameweek solve grows linearly with players (about 0.1 s for 750); walk-forward training is about 15 s per block; the full rebuild takes about 10 minutes on two CPU cores. A multi-week horizon would roll, keeping each MILP small.
@@ -255,7 +265,20 @@ An EWMA control chart (lambda = 0.2, 3-sigma limits) of weekly prediction error 
 - `generate_multi_seasonal` peaks 12 hours after the run starts, not at 17:00.
 - `requirements.txt` is referenced but missing.
 
-## 12. Roadmap
+## 12. Related work (checked on Hugging Face Papers and arXiv, Oct 2026)
+
+| Work | What it is | How it relates here |
+|---|---|---|
+| Groos (2025), OpenFPL, [arXiv:2508.09992](https://arxiv.org/abs/2508.09992) | Open-source FPL point forecasts (XGBoost + random forest ensembles) rivalling a paid service | Same data source; I adopt its outcome buckets for evaluation |
+| Ramezani & Dinh, [arXiv:2505.02170](https://arxiv.org/abs/2505.02170) | MILP team selection, box-uncertainty robust variant, GBP 83.5m XI budget | Budget convention; I replace the box set with a calibrated Bertsimas-Sim budget |
+| Adjileye (2024), RisingBALLER, [arXiv:2410.00943](https://huggingface.co/papers/2410.00943) | Transformer "player as token" embeddings for next-match statistics | A route to richer player features; needs event data I don't use |
+| Grady et al. (2026), KellyBench, [arXiv:2604.27865](https://huggingface.co/papers/2604.27865) | Frontier LLMs as agents in a simulated 2023-24 Premier League betting season: all lost money on average (best -8%) | Why the MCP assistant only routes requests: the decision engine stays a tested model and an exact optimiser |
+| Qu et al. (2025), TabICL, [arXiv:2502.05564](https://huggingface.co/papers/2502.05564); checkpoint [jingang/TabICL](https://huggingface.co/jingang/TabICL) (BSD-3; v2 adds regression, arXiv:2602.11139) | Tabular foundation model scaling in-context learning to ~500K rows | The natural foundation-model challenger to gradient boosting; not run here (weights need a download this offline build avoids) |
+| Gibbs & Candès (2021), adaptive conformal inference, [arXiv:2106.00170](https://huggingface.co/papers/2106.00170) | Online conformal intervals with long-run coverage under arbitrary drift | The upgrade for in-season drift such as the DefCon rule change |
+| Zhou & Zhu (2025), [arXiv:2510.07750](https://huggingface.co/papers/2510.07750) | Distribution-free calibration of robustness levels in robust predict-then-optimise | Motivates choosing Gamma from data (§7) rather than by hand |
+| Mandi et al. (2023), decision-focused learning survey, [arXiv:2307.13565](https://huggingface.co/papers/2307.13565) | Training predictors on decision loss | The roadmap step after the signal-value analysis |
+
+## 13. Roadmap
 
 Multi-week squad and transfer planning (rolling horizon); component-level scoring to absorb rule changes; an opponent-strength model; chips; same-gameweek transfer and ownership signals once their timing is confirmed; **decision-focused training** (training the forecaster on the SPO+ loss rather than RMSE, which §7 suggests would pay off); a tabular foundation model (TabPFN-2.5) as a challenger, once its 50,000-row limit and non-commercial licence allow.
 

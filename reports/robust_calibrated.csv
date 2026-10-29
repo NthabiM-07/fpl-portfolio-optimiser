@@ -1,0 +1,3 @@
+strategy,mean,p10,worst,sd
+risk-neutral (Gamma = 0),58.473684210526315,33.7,18.0,19.87356908614822
+calibrated Gamma (80th pct of past budget used),57.526315789473685,36.4,18.0,19.170270962155094
